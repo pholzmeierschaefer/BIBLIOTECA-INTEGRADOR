@@ -1,8 +1,15 @@
 {
-  "name": "backend",
+  "name": "backend-biblioteca",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node src/main.js",
+    "dev": "nodemon src/main.js",
+    "seed": "node src/config/seed.js",
+    "seed:reset": "node src/config/seed.js --reset"
+  },
+  
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
