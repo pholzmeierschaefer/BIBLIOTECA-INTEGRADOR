@@ -17,12 +17,14 @@ export default function App() {
       return;
     }
 
+    // Busca os dados do usuário logado na API usando o token salvo
     apiRequest('/auth/perfil')
       .then((perfil) => setUsuario(perfil))
       .catch(() => setToken(null))
       .finally(() => setCarregando(false));
   }, []);
 
+  // Remove o token da sessão e volta para a tela de login
   function sair() {
     setToken(null);
     setUsuario(null);
@@ -30,7 +32,7 @@ export default function App() {
 
   if (carregando) return <p style={{ padding: 20 }}>Carregando...</p>;
   if (!usuario) return <Login onLogin={setUsuario} />;
-  if (usuario.role === 'bibliotecario') return <DashAdmin usuario={usuario} onSair={sair} />;
+  if (usuario.role === 'bibliotecario') return <DashAdmin usuario={usuario} onSair={sair} />; // Se for admin, abre o painel administrativo
 
-  return <PortalAluno usuario={usuario} onSair={sair} />;
+  return <PortalAluno usuario={usuario} onSair={sair} />; // Caso contrário, abre o portal do estudante
 }

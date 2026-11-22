@@ -5,11 +5,12 @@ import { Alert, Box, Button, Paper, TextField, Typography } from '@mui/material'
 import { apiRequest, setToken } from '../services/api';
 
 export default function Login({ onLogin }) {
-  const [perfil, setPerfil] = useState('estudante');
+  const [perfil, setPerfil] = useState('estudante'); // Aba selecionada ('estudante' ou 'administrador')
   const [matricula, setMatricula] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
 
+  // Envia as credenciais para a API, salva o token JWT retornado e atualiza o usuário no App
   async function handleEntrar(e) {
     e.preventDefault();
     setErro('');

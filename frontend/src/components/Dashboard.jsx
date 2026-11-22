@@ -9,6 +9,7 @@ export default function Dashboard({ onErro, onSucesso }) {
   const [totalAlunos, setTotalAlunos] = useState(0);
   const [totalLivros, setTotalLivros] = useState(0);
 
+  // Busca em paralelo os indicadores do dashboard, total de alunos e total de livros
   async function carregar() {
     try {
       const [dash, alunos, livros] = await Promise.all([
@@ -28,6 +29,7 @@ export default function Dashboard({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Registra a devolução rápida de um livro atrasado direto pelo Dashboard
   async function handleDevolver(id) {
     try {
       await apiRequest(`/api/emprestimos/${id}/devolver`, { method: 'PUT' });

@@ -26,6 +26,7 @@ export default function PortalAluno({ usuario, onSair }) {
   const [sucesso, setSucesso] = useState('');
   const [modalSenha, setModalSenha] = useState(false);
 
+  // Carrega em paralelo os empréstimos do aluno, o acervo de livros e as reservas
   async function carregarDados() {
     try {
       const [meusEmp, listaLivros, listaReservas] = await Promise.all([
@@ -45,12 +46,14 @@ export default function PortalAluno({ usuario, onSair }) {
     carregarDados();
   }, []);
 
+  // Filtra o acervo de livros pelo termo digitado na busca
   async function pesquisarLivros(termo) {
     setBusca(termo);
     const lista = await apiRequest(`/api/livros${termo ? `?q=${encodeURIComponent(termo)}` : ''}`);
     setLivros(lista);
   }
 
+  // Registra uma nova reserva para o estudante logado
   async function handleReservar(codigoLivro) {
     try {
       await apiRequest('/api/reservas', {
@@ -64,6 +67,7 @@ export default function PortalAluno({ usuario, onSair }) {
     }
   }
 
+  // Cancela uma reserva pendente do estudante
   async function handleCancelarReserva(id) {
     try {
       await apiRequest(`/api/reservas/${id}/cancelar`, { method: 'PUT' });
@@ -74,6 +78,7 @@ export default function PortalAluno({ usuario, onSair }) {
     }
   }
 
+  // Solicita o motivo do atraso e envia a justificativa para o bibliotecário
   async function handleJustificar(emprestimoId) {
     const texto = window.prompt('Digite o motivo do atraso:');
     if (!texto) return;

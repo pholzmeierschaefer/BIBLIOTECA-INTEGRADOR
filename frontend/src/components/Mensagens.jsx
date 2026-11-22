@@ -7,6 +7,7 @@ import { apiRequest, formatarData } from '../services/api';
 export default function Mensagens({ onErro, onSucesso }) {
   const [lista, setLista] = useState([]);
 
+  // Busca todas as justificativas de atraso enviadas pelos estudantes
   async function carregar() {
     try {
       setLista(await apiRequest('/api/emprestimos/justificativas'));
@@ -19,6 +20,7 @@ export default function Mensagens({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Marca uma justificativa pendente como 'analisada' pelo bibliotecário
   async function handleAnalisar(id) {
     try {
       await apiRequest(`/api/emprestimos/justificativas/${id}/analisar`, { method: 'PUT' });

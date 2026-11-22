@@ -20,6 +20,7 @@ export default function Emprestimo({ onErro, onSucesso }) {
   const [matricula, setMatricula] = useState('');
   const [tombo, setTombo] = useState('');
 
+  // Carrega a lista de todos os empréstimos cadastrados
   async function carregar() {
     try {
       setLista(await apiRequest('/api/emprestimos'));
@@ -32,6 +33,7 @@ export default function Emprestimo({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Registra um novo empréstimo informando a matrícula do aluno e o tombo do exemplar
   async function handleCriar(e) {
     e.preventDefault();
     try {
@@ -48,6 +50,7 @@ export default function Emprestimo({ onErro, onSucesso }) {
     }
   }
 
+  // Executa ações de devolver (PUT), renovar (PUT) ou excluir (DELETE) um empréstimo
   async function handleAcao(url, metodo, msg) {
     try {
       await apiRequest(url, { method: metodo });

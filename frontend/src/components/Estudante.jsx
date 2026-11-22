@@ -39,6 +39,7 @@ export default function Estudante({ onErro, onSucesso }) {
   const [xlsxBase64, setXlsxBase64] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
 
+  // Busca a lista de estudantes na API aplicando os filtros de pesquisa e status
   async function carregar(termo = busca, status = filtroStatus) {
     try {
       const params = new URLSearchParams();
@@ -55,6 +56,7 @@ export default function Estudante({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Reseta os campos do formulário e sai do modo de edição
   function limparFormulario() {
     setEditandoMatricula(null);
     setMatricula('');
@@ -63,6 +65,7 @@ export default function Estudante({ onErro, onSucesso }) {
     setTelefone('');
   }
 
+  // Preenche o formulário do topo com os dados do estudante selecionado para edição
   function iniciarEdicao(aluno) {
     setEditandoMatricula(aluno.matricula);
     setMatricula(aluno.matricula);
@@ -71,6 +74,7 @@ export default function Estudante({ onErro, onSucesso }) {
     setTelefone(aluno.telefone || '');
   }
 
+  // Salva um novo estudante (POST) ou atualiza um estudante existente (PUT)
   async function handleSalvar(e) {
     e.preventDefault();
     try {
@@ -94,6 +98,7 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
+  // Lê o arquivo selecionado no computador (.xlsx em Base64 ou .csv/.txt como texto)
   function handleSelecionarArquivo(e) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
@@ -120,6 +125,7 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
+  // Envia a planilha (.xlsx ou .csv) para importação em lote no backend
   async function handleImportarLote() {
     try {
       const body = xlsxBase64 ? { xlsx_base64: xlsxBase64 } : { csv: textoCsv };
@@ -138,6 +144,7 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
+  // Altera rapidamente o status do estudante ('ativo', 'bloqueado' ou 'inativo')
   async function handleStatus(aluno, novoStatus) {
     try {
       await apiRequest(`/api/estudantes/${encodeURIComponent(aluno.matricula)}/status`, {
@@ -151,6 +158,7 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
+  // Exclui definitivamente o estudante do banco de dados
   async function handleExcluir(aluno) {
     try {
       await apiRequest(`/api/estudantes/${encodeURIComponent(aluno.matricula)}`, {

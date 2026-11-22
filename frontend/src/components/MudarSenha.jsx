@@ -9,6 +9,7 @@ export default function MudarSenha({ aberto, onFechar, onSucesso }) {
   const [novaSenha, setNovaSenha] = useState('');
   const [erro, setErro] = useState('');
 
+  // Envia a senha atual e a nova senha para a rota PUT /auth/senha
   async function handleSubmit(e) {
     e.preventDefault();
     setErro('');

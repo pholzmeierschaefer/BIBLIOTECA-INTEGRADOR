@@ -31,6 +31,7 @@ export default function Acervo({ onErro, onSucesso }) {
   const [tipo, setTipo] = useState('Literatura');
   const [categoria, setCategoria] = useState('Romance');
 
+  // Busca a lista de livros aplicando filtros opcionais de texto e categoria
   async function carregar(termo = busca, cat = filtroCategoria) {
     try {
       const params = new URLSearchParams();
@@ -47,6 +48,7 @@ export default function Acervo({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Limpa os campos do formulário e sai do modo de edição
   function limparFormulario() {
     setEditandoId(null);
     setCodigo('');
@@ -57,6 +59,7 @@ export default function Acervo({ onErro, onSucesso }) {
     setCategoria('Romance');
   }
 
+  // Preenche o formulário com os dados do livro selecionado para edição
   function iniciarEdicao(livro) {
     setEditandoId(livro.id);
     setCodigo(livro.codigo);
@@ -67,6 +70,7 @@ export default function Acervo({ onErro, onSucesso }) {
     setCategoria(livro.categoria || 'Romance');
   }
 
+  // Cadastra um novo livro (POST) ou atualiza um livro existente (PUT)
   async function handleSalvarLivro(e) {
     e.preventDefault();
     try {
@@ -85,6 +89,7 @@ export default function Acervo({ onErro, onSucesso }) {
     }
   }
 
+  // Solicita o código de tombo e cadastra um novo exemplar físico vinculado ao livro
   async function handleAdicionarExemplar(livro) {
     const tombo = window.prompt('Código de tombo:');
     if (!tombo) return;
@@ -100,6 +105,7 @@ export default function Acervo({ onErro, onSucesso }) {
     }
   }
 
+  // Exclui o livro do acervo caso não possua exemplares emprestados
   async function handleExcluirLivro(livro) {
     try {
       await apiRequest(`/api/livros/${livro.id}`, { method: 'DELETE' });

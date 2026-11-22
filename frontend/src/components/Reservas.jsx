@@ -20,6 +20,7 @@ export default function Reservas({ onErro, onSucesso }) {
   const [matricula, setMatricula] = useState('');
   const [codigoLivro, setCodigoLivro] = useState('');
 
+  // Carrega a fila de reservas ordenada por chegada
   async function carregar() {
     try {
       setLista(await apiRequest('/api/reservas'));
@@ -32,6 +33,7 @@ export default function Reservas({ onErro, onSucesso }) {
     carregar();
   }, []);
 
+  // Cria uma nova reserva vinculando a matrícula do aluno ao código do livro
   async function handleCriar(e) {
     e.preventDefault();
     try {
@@ -48,6 +50,7 @@ export default function Reservas({ onErro, onSucesso }) {
     }
   }
 
+  // Cancela uma reserva pendente na fila
   async function handleCancelar(id) {
     try {
       await apiRequest(`/api/reservas/${id}/cancelar`, { method: 'PUT' });
@@ -58,6 +61,7 @@ export default function Reservas({ onErro, onSucesso }) {
     }
   }
 
+  // Exclui o registro da reserva do banco de dados
   async function handleExcluir(id) {
     try {
       await apiRequest(`/api/reservas/${id}`, { method: 'DELETE' });

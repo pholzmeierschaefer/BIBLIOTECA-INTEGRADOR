@@ -20,7 +20,7 @@ const ABAS = [
 ];
 
 export default function DashAdmin({ usuario, onSair }) {
-  const [tela, setTela] = useState('dashboard');
+  const [tela, setTela] = useState('dashboard'); // Controla qual aba está visível na tela
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
   const [modalSenha, setModalSenha] = useState(false);
@@ -58,9 +58,11 @@ export default function DashAdmin({ usuario, onSair }) {
         </Box>
       </Box>
 
+      {/* Alertas globais de erro e sucesso das operações */}
       {erro && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErro('')}>{erro}</Alert>}
       {sucesso && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSucesso('')}>{sucesso}</Alert>}
 
+      {/* Renderiza o componente correspondente à aba selecionada */}
       {tela === 'dashboard' && <Dashboard onErro={setErro} onSucesso={setSucesso} />}
       {tela === 'estudantes' && <Estudante onErro={setErro} onSucesso={setSucesso} />}
       {tela === 'acervo' && <Acervo onErro={setErro} onSucesso={setSucesso} />}
@@ -68,6 +70,7 @@ export default function DashAdmin({ usuario, onSair }) {
       {tela === 'reservas' && <Reservas onErro={setErro} onSucesso={setSucesso} />}
       {tela === 'mensagens' && <Mensagens onErro={setErro} onSucesso={setSucesso} />}
 
+      {/* Modal para o administrador alterar a própria senha */}
       <MudarSenha aberto={modalSenha} onFechar={() => setModalSenha(false)} onSucesso={setSucesso} />
     </Box>
   );
