@@ -17,7 +17,7 @@ const app = express();
 
 // Middlewares globais
 app.use(cors()); // Libera requisições vindas do front-end
-app.use(express.json()); // Permite ler o corpo (body) das requisições em formato JSON
+app.use(express.json({ limit: '10mb' })); // Permite ler JSONs maiores (como upload de planilhas .xlsx em base64)
 
 // Rota de verificação de saúde da API
 app.get('/api/health', (req, res) => {

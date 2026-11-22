@@ -1,6 +1,7 @@
 // estudantes.repository.js – Consultas e operações de banco de dados para Estudantes
 
-const { Estudante, Sequelize } = require('../../models');
+const db = require('../../models');
+const { Estudante, Sequelize, sequelize } = db;
 const { Op } = Sequelize; // Operadores de consulta SQL do Sequelize (iLike, or, etc.)
 
 // Lista estudantes aplicando filtros opcionais
@@ -49,10 +50,30 @@ async function atualizarEstudante(estudante, dados) {
   return estudante.update(dados);
 }
 
+// Exclui definitivamente o estudante (e registros vinculados, como conta de usuário/reservas/justificativas) do banco
+async function excluirEstudante(estudanteId) {
+  return sequelize.transaction(async (transaction) => {
+    if (db.Justificativa) {
+      await db.Justificativa.destroy({ where: { estudante_id: estudanteId }, transaction });
+    }
+    if (db.Reserva) {
+      await db.Reserva.destroy({ where: { estudante_id: estudanteId }, transaction });
+    }
+    if (db.Emprestimo) {
+      await db.Emprestimo.destroy({ where: { estudante_id: estudanteId }, transaction });
+    }
+    if (db.Usuario) {
+      await db.Usuario.destroy({ where: { estudante_id: estudanteId }, transaction });
+    }
+    return Estudante.destroy({ where: { id: estudanteId }, transaction });
+  });
+}
+
 module.exports = {
   listarEstudantes,
   buscarEstudantePorId,
   buscarEstudantePorMatricula,
   criarEstudante,
   atualizarEstudante,
+  excluirEstudante,
 };

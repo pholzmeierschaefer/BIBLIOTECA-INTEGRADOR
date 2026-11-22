@@ -84,25 +84,26 @@ async function inativarEstudante(req, res, next) {
   }
 }
 
-// POST /api/estudantes/importar – Importa estudantes em lote via texto CSV ou array JSON
+// POST /api/estudantes/importar – Importa estudantes em lote via planilha .xlsx (base64), texto CSV ou array JSON
 async function importarEstudantes(req, res, next) {
   try {
     const atualizarExistentes =
       req.query.atualizar_existentes === 'true' || Boolean(req.body?.atualizar_existentes);
 
-    // Aceita CSV puro no body, ou JSON { csv: "..." }, ou array JSON direto / { estudantes: [...] }
+    const xlsxBase64 = req.body?.xlsx_base64;
     const csv = typeof req.body === 'string' ? req.body : req.body?.csv;
     const estudantes = Array.isArray(req.body)
       ? req.body
       : req.body?.estudantes || req.body?.alunos;
 
-    if (!csv && !estudantes) {
+    if (!xlsxBase64 && !csv && !estudantes) {
       return res.status(400).json({
-        erro: 'Formato inválido. Envie um texto CSV ou uma lista JSON em { estudantes: [...] }.',
+        erro: 'Formato inválido. Envie uma planilha .xlsx, um texto CSV ou uma lista JSON.',
       });
     }
 
     const resultado = await estudantesService.importarEstudantes({
+      xlsxBase64,
       csv,
       estudantes,
       atualizarExistentes,
