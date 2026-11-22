@@ -19,7 +19,7 @@ module.exports = {
   port: Number(process.env.PORT) || 3000,
 
   // Chave secreta usada para assinar e validar os tokens JWT
-  jwtSecret: process.env.JWT_SECRET,
+  jwtSecret: process.env.JWT_SECRET || 'segredo_jwt_biblioteca_hm_dev_2026',
 
   // Tempo de expiração do token JWT (padrão: 15 minutos)
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '15m',

@@ -32,6 +32,7 @@ function errorHandler(err, req, res, _next) {
 
   return res.status(status).json({
     erro: mensagem,
+    ...(status >= 500 && { detalhe: err.message }), // Mostra a causa real do erro 500 para facilitar os testes
     ...(err.codigo && { codigo: err.codigo }), // Inclui o código do erro caso tenha sido definido no Service
   });
 }

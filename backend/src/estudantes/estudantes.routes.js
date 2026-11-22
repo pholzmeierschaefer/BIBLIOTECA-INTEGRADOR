@@ -1,32 +1,37 @@
-// estudantes.routes.js – Definição das rotas HTTP para o módulo de Estudantes
+// estudantes.routes.js – Definição das rotas HTTP protegidas para o módulo de Estudantes
 
 const express = require('express');
 const estudantesController = require('./estudantes.controller');
+const autenticar = require('../middlewares/autenticar'); // Exige token JWT válido
+const autorizar = require('../middlewares/autorizar'); // Restringe acesso por perfil (role)
 
-const router = express.Router(); // Cria o agrupador de rotas do Express
+const router = express.Router();
 
-// Middleware nativo do Express que lê o corpo da requisição como texto puro (usado para upload de arquivo CSV)
+// Middleware nativo do Express que lê o corpo da requisição como texto puro (upload de CSV)
 const parseCsvBody = express.text({ type: ['text/csv', 'text/plain'], limit: '2mb' });
 
-// Importação de estudantes em lote via CSV (vem antes de /:matricula para o Express não confundir "importar" com uma matrícula)
-router.post('/importar', parseCsvBody, estudantesController.importarEstudantes);
+// Aplica a exigência do token JWT (autenticar) em TODAS as rotas de estudantes abaixo
+router.use(autenticar);
 
-// Lista todos os estudantes (aceita filtros via query params: ?nome=..., ?turma=..., ?q=...)
-router.get('/', estudantesController.listarEstudantes);
+// Importação de estudantes em lote via CSV (apenas bibliotecario)
+router.post('/importar', autorizar('bibliotecario'), parseCsvBody, estudantesController.importarEstudantes);
 
-// Cadastra um novo estudante individualmente
-router.post('/', estudantesController.cadastrarEstudante);
+// Lista todos os estudantes com filtros opcionais (apenas bibliotecario)
+router.get('/', autorizar('bibliotecario'), estudantesController.listarEstudantes);
 
-// Busca os dados de um estudante específico pela matrícula na URL
+// Cadastra um novo estudante (apenas bibliotecario)
+router.post('/', autorizar('bibliotecario'), estudantesController.cadastrarEstudante);
+
+// Busca um estudante pela matrícula (qualquer usuário autenticado com token)
 router.get('/:matricula', estudantesController.buscarPorMatricula);
 
-// Atualiza os dados cadastrais do estudante (nome, turma, telefone, etc.)
-router.put('/:matricula', estudantesController.editarEstudante);
+// Atualiza os dados cadastrais do estudante (apenas bibliotecario)
+router.put('/:matricula', autorizar('bibliotecario'), estudantesController.editarEstudante);
 
-// Altera apenas a situação do estudante ('ativo', 'bloqueado' ou 'inativo')
-router.put('/:matricula/status', estudantesController.alterarStatusEstudante);
+// Altera apenas o status ('ativo', 'bloqueado' ou 'inativo') do estudante (apenas bibliotecario)
+router.put('/:matricula/status', autorizar('bibliotecario'), estudantesController.alterarStatusEstudante);
 
-// Inativa o estudante (exclusão lógica para não perder o histórico na biblioteca)
-router.delete('/:matricula', estudantesController.inativarEstudante);
+// Inativa o estudante mantendo o histórico (apenas bibliotecario)
+router.delete('/:matricula', autorizar('bibliotecario'), estudantesController.inativarEstudante);
 
 module.exports = router;

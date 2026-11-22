@@ -27,10 +27,10 @@ module.exports = (sequelize, DataTypes) => {
         unique: { msg: 'Esta matrícula de acesso já está cadastrada.' },
       },
 
-      // E-mail utilizado para login (obrigatório, único e com validação de formato)
+      // E-mail utilizado para login (opcional caso o banco já possua registros antigos só com matrícula)
       email: {
         type: DataTypes.STRING(150),
-        allowNull: false,
+        allowNull: true,
         unique: { msg: 'Este e-mail já está cadastrado.' },
         validate: {
           isEmail: { msg: 'Informe um endereço de e-mail válido.' },

@@ -58,5 +58,12 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
+  // Relacionamento com a conta de acesso (Usuario)
+  Estudante.associate = (models) => {
+    if (models.Usuario) {
+      Estudante.hasOne(models.Usuario, { foreignKey: 'estudante_id', as: 'usuario' });
+    }
+  };
+
   return Estudante;
 };
