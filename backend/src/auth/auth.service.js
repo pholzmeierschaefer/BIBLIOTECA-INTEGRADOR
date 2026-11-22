@@ -55,7 +55,7 @@ function gerarToken(usuario) {
 }
 
 // Cadastra um novo usuário com senha criptografada (e vincula/cria o Estudante se for aluno)
-async function registrar({ nome, email, senha, role, matricula, turma, telefone }) {
+async function registrar({ nome, email, senha, role, perfil, matricula, turma, telefone }) {
   const emailNormalizado = String(email).trim().toLowerCase();
 
   // Verifica se o e-mail ou a matrícula já estão em uso
@@ -68,12 +68,8 @@ async function registrar({ nome, email, senha, role, matricula, turma, telefone 
     throw criarErroHttp(409, 'Matrícula já cadastrada.', 'MATRICULA_DUPLICADA');
   }
 
-  // Permite criar o primeiro bibliotecário do sistema; os demais cadastros públicos entram como 'aluno'
-  const totalBibliotecarios = await authRepository.contarUsuariosPorRole('bibliotecario');
-  const papelFinal =
-    ['bibliotecario', 'administrador'].includes(role) && totalBibliotecarios === 0
-      ? 'bibliotecario'
-      : 'aluno';
+  // Define o perfil do usuário ('bibliotecario' ou 'aluno') conforme enviado no body (aceita 'role' ou 'perfil')
+  const papelFinal = mapearPerfilParaRole(role ?? perfil) || 'aluno';
 
   const senhaHash = await bcrypt.hash(String(senha), SALT_ROUNDS);
 
@@ -129,6 +125,12 @@ async function login({ matricula, email, senha, perfil }) {
 
   if (!usuario || !senhaValida) {
     throw criarErroHttp(401, 'Matrícula ou senha inválidos.', 'CREDENCIAIS_INVALIDAS');
+  }
+
+  // Se o usuário tentar logar como Administrador mas a conta dele estava como 'aluno' no banco, promove para 'bibliotecario' caso seja conta admin ou não tenha estudante vinculado
+  if (roleEsperada === 'bibliotecario' && usuario.role !== 'bibliotecario' && !usuario.estudante_id) {
+    await usuario.update({ role: 'bibliotecario' });
+    usuario.role = 'bibliotecario';
   }
 
   // Garante que um aluno não faça login na aba de Administrador (e vice-versa)
