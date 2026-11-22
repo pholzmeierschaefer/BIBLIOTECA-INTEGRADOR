@@ -1,4 +1,4 @@
-// livros.service.js – Regras de negócio para Livros e Exemplares físicos
+// livros.service.js – Regras de negócio para Livros, Categorias e Exemplares físicos
 
 const livrosRepository = require('./livros.repository');
 
@@ -41,8 +41,10 @@ function formatarLivro(livro, incluirExemplares = false) {
     autor: livro.autor,
     editora: livro.editora,
     ano_publicacao: livro.ano_publicacao,
-    tipo: livro.tipo,
-    categoria: livro.categoria,
+    tipo: livro.tipoLivro?.descricao || livro.tipo || null, // Prioriza a descrição vinda da tabela 'tipos_livro'
+    tipo_livro_id: livro.tipo_livro_id || null,
+    categoria: livro.categoriaRel?.nome || livro.categoria || null, // Prioriza o nome vindo da tabela 'categorias'
+    categoria_id: livro.categoria_id || null,
     total_exemplares: exemplares.length,
     exemplares_disponiveis: disponiveis,
     disponivel_para_emprestimo: disponiveis > 0, // true se houver ao menos 1 exemplar livre na estante
@@ -84,7 +86,7 @@ async function buscarLivroPorId(idOuCodigo) {
   return formatarLivro(livro, true);
 }
 
-// Cadastra um novo livro verificando antes se o código já existe
+// Cadastra um novo livro verificando antes se o código já existe e vinculando a Categoria
 async function criarLivro(dados) {
   const codigo = String(dados.codigo || dados.codigo_livro).trim();
 
@@ -92,17 +94,28 @@ async function criarLivro(dados) {
     throw criarErroHttp(409, `Já existe um livro cadastrado com o código "${codigo}".`);
   }
 
+  // Busca ou cria o tipo do livro e a categoria nas respectivas tabelas
+  const tipoObj = await livrosRepository.buscarOuCriarTipoLivro(
+    dados.tipo_livro_id ?? dados.tipo
+  );
+  const categoriaObj = await livrosRepository.buscarOuCriarCategoria(
+    dados.categoria_id ?? dados.categoria
+  );
+
   const novoLivro = await livrosRepository.criarLivro({
     codigo_livro: codigo,
     titulo: String(dados.titulo).trim(),
     autor: String(dados.autor).trim(),
     editora: dados.editora?.trim() || null,
     ano_publicacao: dados.ano_publicacao ? Number(dados.ano_publicacao) : null,
-    tipo: dados.tipo?.trim() || null,
-    categoria: dados.categoria?.trim() || null,
+    tipo: tipoObj ? tipoObj.descricao : dados.tipo?.trim() || null,
+    tipo_livro_id: tipoObj ? tipoObj.id : null,
+    categoria: categoriaObj ? categoriaObj.nome : dados.categoria?.trim() || null,
+    categoria_id: categoriaObj ? categoriaObj.id : null,
   });
 
-  return formatarLivro(novoLivro, true);
+  const livroCompleto = await livrosRepository.buscarLivroPorId(novoLivro.id);
+  return formatarLivro(livroCompleto, true);
 }
 
 // Atualiza os dados de um livro existente
@@ -118,7 +131,7 @@ async function editarLivro(idOuCodigo, dados) {
     }
   }
 
-  await livrosRepository.atualizarLivro(livro, {
+  const camposAtualizados = {
     ...(novoCodigo !== undefined && { codigo_livro: String(novoCodigo).trim() }),
     ...(dados.titulo !== undefined && { titulo: String(dados.titulo).trim() }),
     ...(dados.autor !== undefined && { autor: String(dados.autor).trim() }),
@@ -126,10 +139,27 @@ async function editarLivro(idOuCodigo, dados) {
     ...(dados.ano_publicacao !== undefined && {
       ano_publicacao: dados.ano_publicacao ? Number(dados.ano_publicacao) : null,
     }),
-    ...(dados.tipo !== undefined && { tipo: dados.tipo?.trim() || null }),
-    ...(dados.categoria !== undefined && { categoria: dados.categoria?.trim() || null }),
-  });
+  };
 
+  // Se enviou um novo tipo de livro, busca ou cria na tabela 'tipos_livro' e atualiza o vínculo
+  if (dados.tipo !== undefined || dados.tipo_livro_id !== undefined) {
+    const tipoObj = await livrosRepository.buscarOuCriarTipoLivro(
+      dados.tipo_livro_id ?? dados.tipo
+    );
+    camposAtualizados.tipo = tipoObj ? tipoObj.descricao : null;
+    camposAtualizados.tipo_livro_id = tipoObj ? tipoObj.id : null;
+  }
+
+  // Se enviou uma nova categoria, busca ou cria na tabela 'categorias' e atualiza o vínculo
+  if (dados.categoria !== undefined || dados.categoria_id !== undefined) {
+    const categoriaObj = await livrosRepository.buscarOuCriarCategoria(
+      dados.categoria_id ?? dados.categoria
+    );
+    camposAtualizados.categoria = categoriaObj ? categoriaObj.nome : null;
+    camposAtualizados.categoria_id = categoriaObj ? categoriaObj.id : null;
+  }
+
+  await livrosRepository.atualizarLivro(livro, camposAtualizados);
   const atualizado = await livrosRepository.buscarLivroPorId(livro.id);
   return formatarLivro(atualizado, true);
 }

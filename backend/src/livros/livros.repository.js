@@ -1,10 +1,78 @@
-// livros.repository.js – Camada de acesso ao banco de dados (Sequelize) para Livros e Exemplares
+// livros.repository.js – Camada de acesso ao banco de dados (Sequelize) para Livros, Categorias e Exemplares
 
-const { Livro, Exemplar, Sequelize, sequelize } = require('../../models');
+const { Livro, TipoLivro, Categoria, Exemplar, Sequelize, sequelize } = require('../../models');
 const { Op } = Sequelize; // Operadores SQL do Sequelize (iLike, or, etc.)
 
-// JOIN padrão: sempre que buscarmos um Livro, já trazemos a lista de exemplares físicos dele
-const INCLUDE_EXEMPLARES = [{ model: Exemplar, as: 'exemplares' }];
+// JOIN padrão: traz os exemplares físicos, o tipo do livro e a categoria vinculada ao Livro
+const INCLUDE_PADRAO = [
+  { model: Exemplar, as: 'exemplares' },
+  { model: TipoLivro, as: 'tipoLivro' },
+  { model: Categoria, as: 'categoriaRel' },
+];
+
+// Busca um TipoLivro existente (por ID, código ou descrição) ou cria um novo automaticamente
+async function buscarOuCriarTipoLivro(valor) {
+  if (!valor || String(valor).trim() === '') return null;
+
+  if (typeof valor === 'number' || /^\d+$/.test(String(valor).trim())) {
+    return TipoLivro.findByPk(Number(valor));
+  }
+
+  const descricao = String(valor).trim();
+  const existente = await TipoLivro.findOne({
+    where: {
+      [Op.or]: [
+        { descricao: { [Op.iLike]: descricao } },
+        { codigo: { [Op.iLike]: descricao } },
+      ],
+    },
+  });
+
+  if (existente) return existente;
+
+  const codigo =
+    descricao
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .slice(0, 16) || 'GERAL';
+
+  return TipoLivro.create({ codigo, descricao });
+}
+
+// Busca uma Categoria existente (por ID, código ou nome) ou cria uma nova automaticamente
+async function buscarOuCriarCategoria(valor) {
+  if (!valor || String(valor).trim() === '') return null;
+
+  // Se foi enviado um ID numérico (ex: categoria_id: 1), busca pela chave primária
+  if (typeof valor === 'number' || /^\d+$/.test(String(valor).trim())) {
+    return Categoria.findByPk(Number(valor));
+  }
+
+  const nome = String(valor).trim();
+  const existente = await Categoria.findOne({
+    where: {
+      [Op.or]: [
+        { nome: { [Op.iLike]: nome } },
+        { codigo: { [Op.iLike]: nome } },
+      ],
+    },
+  });
+
+  if (existente) return existente;
+
+  // Gera um código curto sem acentos (ex: "Ficção Científica" -> "FICCAO_CIENTIFIC")
+  const codigo =
+    nome
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .slice(0, 16) || 'GERAL';
+
+  return Categoria.create({ codigo, nome });
+}
 
 // Lista livros do acervo com filtros opcionais de busca
 async function listarLivros({ titulo, autor, tipo, categoria, codigo, q } = {}) {
@@ -27,21 +95,21 @@ async function listarLivros({ titulo, autor, tipo, categoria, codigo, q } = {}) 
 
   return Livro.findAll({
     where,
-    include: INCLUDE_EXEMPLARES,
+    include: INCLUDE_PADRAO,
     order: [['titulo', 'ASC']], // Ordena os livros em ordem alfabética pelo título
   });
 }
 
 // Busca um livro pelo ID numérico (chave primária)
 async function buscarLivroPorId(id) {
-  return Livro.findByPk(id, { include: INCLUDE_EXEMPLARES });
+  return Livro.findByPk(id, { include: INCLUDE_PADRAO });
 }
 
 // Busca um livro pelo código único (ex: "LIV-001")
 async function buscarLivroPorCodigo(codigoLivro) {
   return Livro.findOne({
     where: { codigo_livro: { [Op.iLike]: String(codigoLivro).trim() } },
-    include: INCLUDE_EXEMPLARES,
+    include: INCLUDE_PADRAO,
   });
 }
 
@@ -97,6 +165,8 @@ async function excluirExemplar(exemplar) {
 }
 
 module.exports = {
+  buscarOuCriarTipoLivro,
+  buscarOuCriarCategoria,
   listarLivros,
   buscarLivroPorId,
   buscarLivroPorCodigo,

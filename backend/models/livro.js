@@ -34,8 +34,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100), // Ex: "Literatura", "Didático"
         allowNull: true,
       },
+      tipo_livro_id: {
+        type: DataTypes.INTEGER, // Chave estrangeira ligada à tabela 'tipos_livro'
+        allowNull: true,
+      },
       categoria: {
         type: DataTypes.STRING(100), // Ex: "Romance", "História"
+        allowNull: true,
+      },
+      categoria_id: {
+        type: DataTypes.INTEGER, // Chave estrangeira ligada à tabela 'categorias'
         allowNull: true,
       },
     },
@@ -44,8 +52,14 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  // Relacionamentos: 1 Livro possui vários Exemplares físicos na estante (1:N)
+  // Relacionamentos: 1 Livro pertence a 1 TipoLivro, 1 Categoria e possui vários Exemplares físicos (1:N)
   Livro.associate = (models) => {
+    if (models.TipoLivro) {
+      Livro.belongsTo(models.TipoLivro, { foreignKey: 'tipo_livro_id', as: 'tipoLivro' });
+    }
+    if (models.Categoria) {
+      Livro.belongsTo(models.Categoria, { foreignKey: 'categoria_id', as: 'categoriaRel' });
+    }
     if (models.Exemplar) {
       Livro.hasMany(models.Exemplar, { foreignKey: 'livro_id', as: 'exemplares' });
     }
