@@ -1,6 +1,7 @@
 // estudantes.service.js – Regras de negócio para o gerenciamento e importação de Estudantes (incluindo planilha SISGESC .xlsx e .csv)
 
 const zlib = require('zlib');
+const bcrypt = require('bcrypt');
 const estudantesRepository = require('./estudantes.repository');
 
 const STATUS_VALIDOS = ['ativo', 'bloqueado', 'inativo'];
@@ -325,6 +326,10 @@ async function cadastrarEstudante(dados) {
     status,
   });
 
+  // Cria a conta de login do aluno com senha inicial igual à própria matrícula
+  const senhaHash = await bcrypt.hash(matricula, 12);
+  await estudantesRepository.garantirUsuarioDoEstudante(novoEstudante, senhaHash);
+
   return formatarEstudante(novoEstudante);
 }
 
@@ -416,13 +421,17 @@ async function importarEstudantes({ xlsxBase64, csv, estudantes, atualizarExiste
       continue;
     }
 
-    await estudantesRepository.criarEstudante({
+    const novoEstudante = await estudantesRepository.criarEstudante({
       matricula,
       nome_completo,
       turma,
       telefone,
       status: 'ativo',
     });
+
+    // Cria a conta de login do aluno importado com senha inicial igual à própria matrícula
+    const senhaHash = await bcrypt.hash(matricula, 12);
+    await estudantesRepository.garantirUsuarioDoEstudante(novoEstudante, senhaHash);
     criados += 1;
   }
 

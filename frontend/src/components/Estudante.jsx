@@ -1,4 +1,4 @@
-// Estudante.jsx – Cadastro individual, importação em lote (.xlsx e .csv do SISGESC), listagem e controle de status
+// Estudante.jsx – Cadastro, edição, importação em lote (.xlsx/.csv), ordenação, filtro e exclusão de Estudantes
 
 import { useEffect, useState } from 'react';
 import {
@@ -8,6 +8,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Paper,
   Table,
   TableBody,
@@ -22,6 +23,11 @@ import { apiRequest } from '../services/api';
 export default function Estudante({ onErro, onSucesso }) {
   const [lista, setLista] = useState([]);
   const [busca, setBusca] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('');
+  const [ordenacao, setOrdenacao] = useState('nome');
+
+  // Campos do formulário (criação e edição)
+  const [editandoMatricula, setEditandoMatricula] = useState(null);
   const [matricula, setMatricula] = useState('');
   const [nome, setNome] = useState('');
   const [turma, setTurma] = useState('');
@@ -33,9 +39,12 @@ export default function Estudante({ onErro, onSucesso }) {
   const [xlsxBase64, setXlsxBase64] = useState('');
   const [nomeArquivo, setNomeArquivo] = useState('');
 
-  async function carregar(termo = '') {
+  async function carregar(termo = busca, status = filtroStatus) {
     try {
-      const qs = termo ? `?q=${encodeURIComponent(termo)}` : '';
+      const params = new URLSearchParams();
+      if (termo) params.set('q', termo);
+      if (status) params.set('status', status);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       setLista(await apiRequest(`/api/estudantes${qs}`));
     } catch (err) {
       onErro(err.message);
@@ -46,25 +55,45 @@ export default function Estudante({ onErro, onSucesso }) {
     carregar();
   }, []);
 
-  async function handleCadastrar(e) {
+  function limparFormulario() {
+    setEditandoMatricula(null);
+    setMatricula('');
+    setNome('');
+    setTurma('');
+    setTelefone('');
+  }
+
+  function iniciarEdicao(aluno) {
+    setEditandoMatricula(aluno.matricula);
+    setMatricula(aluno.matricula);
+    setNome(aluno.nome);
+    setTurma(aluno.turma);
+    setTelefone(aluno.telefone || '');
+  }
+
+  async function handleSalvar(e) {
     e.preventDefault();
     try {
-      await apiRequest('/api/estudantes', {
-        method: 'POST',
-        body: { matricula, nome, turma, telefone },
-      });
-      onSucesso('Estudante cadastrado.');
-      setMatricula('');
-      setNome('');
-      setTurma('');
-      setTelefone('');
-      carregar(busca);
+      if (editandoMatricula) {
+        await apiRequest(`/api/estudantes/${encodeURIComponent(editandoMatricula)}`, {
+          method: 'PUT',
+          body: { matricula, nome, turma, telefone },
+        });
+        onSucesso('Estudante atualizado.');
+      } else {
+        await apiRequest('/api/estudantes', {
+          method: 'POST',
+          body: { matricula, nome, turma, telefone },
+        });
+        onSucesso('Estudante cadastrado.');
+      }
+      limparFormulario();
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
   }
 
-  // Lê o arquivo selecionado: se for .xlsx lê em Base64; se for .csv/.txt lê como texto
   function handleSelecionarArquivo(e) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
@@ -91,7 +120,6 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
-  // Envia a planilha (.xlsx ou .csv) para a rota POST /api/estudantes/importar
   async function handleImportarLote() {
     try {
       const body = xlsxBase64 ? { xlsx_base64: xlsxBase64 } : { csv: textoCsv };
@@ -104,7 +132,7 @@ export default function Estudante({ onErro, onSucesso }) {
       setXlsxBase64('');
       setNomeArquivo('');
       setModalCsv(false);
-      carregar(busca);
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
@@ -117,7 +145,7 @@ export default function Estudante({ onErro, onSucesso }) {
         body: { status: novoStatus },
       });
       onSucesso('Status atualizado.');
-      carregar(busca);
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
@@ -129,11 +157,18 @@ export default function Estudante({ onErro, onSucesso }) {
         method: 'DELETE',
       });
       onSucesso('Estudante excluído.');
-      carregar(busca);
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
   }
+
+  // Ordena a lista pelo campo selecionado (nome, turma ou matrícula)
+  const listaOrdenada = [...lista].sort((a, b) => {
+    if (ordenacao === 'turma') return (a.turma || '').localeCompare(b.turma || '');
+    if (ordenacao === 'matricula') return (a.matricula || '').localeCompare(b.matricula || '');
+    return (a.nome || '').localeCompare(b.nome || '');
+  });
 
   return (
     <Box>
@@ -144,10 +179,10 @@ export default function Estudante({ onErro, onSucesso }) {
         </Button>
       </Box>
 
-      {/* Formulário direto em linha para cadastrar estudante */}
+      {/* Formulário para cadastrar ou editar estudante */}
       <Paper
         component="form"
-        onSubmit={handleCadastrar}
+        onSubmit={handleSalvar}
         variant="outlined"
         sx={{ p: 2, mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}
       >
@@ -155,19 +190,57 @@ export default function Estudante({ onErro, onSucesso }) {
         <TextField size="small" label="Nome Completo" required value={nome} onChange={(e) => setNome(e.target.value)} />
         <TextField size="small" label="Turma" required value={turma} onChange={(e) => setTurma(e.target.value)} />
         <TextField size="small" label="Telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-        <Button type="submit" variant="contained">Cadastrar</Button>
+        <Button type="submit" variant="contained">
+          {editandoMatricula ? 'Salvar' : 'Cadastrar'}
+        </Button>
+        {editandoMatricula && (
+          <Button variant="outlined" onClick={limparFormulario}>
+            Cancelar
+          </Button>
+        )}
       </Paper>
 
-      <TextField
-        size="small"
-        placeholder="Pesquisar estudante..."
-        value={busca}
-        onChange={(e) => {
-          setBusca(e.target.value);
-          carregar(e.target.value);
-        }}
-        sx={{ mb: 2, width: 300 }}
-      />
+      {/* Barra de busca, filtro por status e ordenação */}
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+        <TextField
+          size="small"
+          placeholder="Pesquisar estudante..."
+          value={busca}
+          onChange={(e) => {
+            setBusca(e.target.value);
+            carregar(e.target.value, filtroStatus);
+          }}
+          sx={{ width: 260 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Status"
+          value={filtroStatus}
+          onChange={(e) => {
+            setFiltroStatus(e.target.value);
+            carregar(busca, e.target.value);
+          }}
+          sx={{ width: 150 }}
+        >
+          <MenuItem value="">Todos</MenuItem>
+          <MenuItem value="ativo">Ativo</MenuItem>
+          <MenuItem value="bloqueado">Bloqueado</MenuItem>
+          <MenuItem value="inativo">Inativo</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Ordenar por"
+          value={ordenacao}
+          onChange={(e) => setOrdenacao(e.target.value)}
+          sx={{ width: 160 }}
+        >
+          <MenuItem value="nome">Nome</MenuItem>
+          <MenuItem value="turma">Turma</MenuItem>
+          <MenuItem value="matricula">Matrícula</MenuItem>
+        </TextField>
+      </Box>
 
       <Table size="small">
         <TableHead>
@@ -181,7 +254,7 @@ export default function Estudante({ onErro, onSucesso }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {lista.map((aluno) => (
+          {listaOrdenada.map((aluno) => (
             <TableRow key={aluno.id}>
               <TableCell>{aluno.matricula}</TableCell>
               <TableCell>{aluno.nome}</TableCell>
@@ -189,6 +262,7 @@ export default function Estudante({ onErro, onSucesso }) {
               <TableCell>{aluno.telefone || '-'}</TableCell>
               <TableCell>{aluno.status}</TableCell>
               <TableCell>
+                <Button size="small" onClick={() => iniciarEdicao(aluno)}>Editar</Button>
                 {aluno.status !== 'ativo' && (
                   <Button size="small" onClick={() => handleStatus(aluno, 'ativo')}>Ativar</Button>
                 )}

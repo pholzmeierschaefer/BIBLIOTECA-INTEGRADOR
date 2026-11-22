@@ -45,6 +45,23 @@ async function criarEstudante(dados) {
   return Estudante.create(dados);
 }
 
+// Cria ou atualiza a conta de login (tabela 'usuarios') do estudante com senha inicial = matrícula
+async function garantirUsuarioDoEstudante(estudante, senhaHash) {
+  if (!db.Usuario) return;
+  const existente = await db.Usuario.findOne({ where: { estudante_id: estudante.id } });
+  if (existente) {
+    return existente.update({ nome: estudante.nome_completo, matricula: estudante.matricula });
+  }
+  return db.Usuario.create({
+    nome: estudante.nome_completo,
+    matricula: estudante.matricula,
+    email: `${estudante.matricula.toLowerCase()}@aluno.biblioteca.com`,
+    senha: senhaHash,
+    role: 'aluno',
+    estudante_id: estudante.id,
+  });
+}
+
 // Atualiza um registro de estudante já carregado
 async function atualizarEstudante(estudante, dados) {
   return estudante.update(dados);
@@ -74,6 +91,7 @@ module.exports = {
   buscarEstudantePorId,
   buscarEstudantePorMatricula,
   criarEstudante,
+  garantirUsuarioDoEstudante,
   atualizarEstudante,
   excluirEstudante,
 };

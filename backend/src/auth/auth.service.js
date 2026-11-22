@@ -120,7 +120,24 @@ async function login({ matricula, email, senha, perfil }) {
     throw criarErroHttp(400, 'Perfil inválido. Escolha "administrador" ou "estudante".', 'PERFIL_INVALIDO');
   }
 
-  const usuario = await authRepository.buscarUsuarioPorMatricula(identificador);
+  let usuario = await authRepository.buscarUsuarioPorMatricula(identificador);
+
+  // Se o aluno já existe na tabela 'estudantes' mas ainda não tinha conta em 'usuarios', cria a conta automaticamente com senha = matrícula
+  if (!usuario) {
+    const estudante = await authRepository.buscarEstudantePorMatricula(identificador);
+    if (estudante) {
+      const senhaHash = await bcrypt.hash(estudante.matricula, SALT_ROUNDS);
+      usuario = await authRepository.criarUsuario({
+        nome: estudante.nome_completo,
+        matricula: estudante.matricula,
+        email: `${estudante.matricula.toLowerCase()}@aluno.biblioteca.com`,
+        senha: senhaHash,
+        role: 'aluno',
+        estudante_id: estudante.id,
+      });
+    }
+  }
+
   const senhaValida = usuario ? await bcrypt.compare(String(senha), usuario.senha) : false;
 
   if (!usuario || !senhaValida) {

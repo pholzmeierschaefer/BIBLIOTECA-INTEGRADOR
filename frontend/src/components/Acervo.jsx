@@ -1,9 +1,10 @@
-// Acervo.jsx – Cadastro e listagem de Livros e de seus Exemplares físicos (tombos)
+// Acervo.jsx – Cadastro, edição, ordenação, filtro por categoria e exclusão de Livros e Exemplares
 
 import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
+  MenuItem,
   Paper,
   Table,
   TableBody,
@@ -18,6 +19,11 @@ import { apiRequest } from '../services/api';
 export default function Acervo({ onErro, onSucesso }) {
   const [livros, setLivros] = useState([]);
   const [busca, setBusca] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [ordenacao, setOrdenacao] = useState('titulo');
+
+  // Campos do formulário (criação e edição)
+  const [editandoId, setEditandoId] = useState(null);
   const [codigo, setCodigo] = useState('');
   const [titulo, setTitulo] = useState('');
   const [autor, setAutor] = useState('');
@@ -25,9 +31,12 @@ export default function Acervo({ onErro, onSucesso }) {
   const [tipo, setTipo] = useState('Literatura');
   const [categoria, setCategoria] = useState('Romance');
 
-  async function carregar(termo = '') {
+  async function carregar(termo = busca, cat = filtroCategoria) {
     try {
-      const qs = termo ? `?q=${encodeURIComponent(termo)}` : '';
+      const params = new URLSearchParams();
+      if (termo) params.set('q', termo);
+      if (cat) params.set('categoria', cat);
+      const qs = params.toString() ? `?${params.toString()}` : '';
       setLivros(await apiRequest(`/api/livros${qs}`));
     } catch (err) {
       onErro(err.message);
@@ -38,19 +47,39 @@ export default function Acervo({ onErro, onSucesso }) {
     carregar();
   }, []);
 
-  async function handleCriarLivro(e) {
+  function limparFormulario() {
+    setEditandoId(null);
+    setCodigo('');
+    setTitulo('');
+    setAutor('');
+    setEditora('');
+    setTipo('Literatura');
+    setCategoria('Romance');
+  }
+
+  function iniciarEdicao(livro) {
+    setEditandoId(livro.id);
+    setCodigo(livro.codigo);
+    setTitulo(livro.titulo);
+    setAutor(livro.autor);
+    setEditora(livro.editora || '');
+    setTipo(livro.tipo || 'Literatura');
+    setCategoria(livro.categoria || 'Romance');
+  }
+
+  async function handleSalvarLivro(e) {
     e.preventDefault();
     try {
-      await apiRequest('/api/livros', {
-        method: 'POST',
-        body: { codigo, titulo, autor, editora, tipo, categoria },
-      });
-      onSucesso('Livro cadastrado!');
-      setCodigo('');
-      setTitulo('');
-      setAutor('');
-      setEditora('');
-      carregar(busca);
+      const body = { codigo, titulo, autor, editora, tipo, categoria };
+      if (editandoId) {
+        await apiRequest(`/api/livros/${editandoId}`, { method: 'PUT', body });
+        onSucesso('Livro atualizado.');
+      } else {
+        await apiRequest('/api/livros', { method: 'POST', body });
+        onSucesso('Livro cadastrado.');
+      }
+      limparFormulario();
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
@@ -65,7 +94,7 @@ export default function Acervo({ onErro, onSucesso }) {
         body: { codigo_tombo: tombo.trim() },
       });
       onSucesso('Exemplar adicionado.');
-      carregar(busca);
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
@@ -75,20 +104,27 @@ export default function Acervo({ onErro, onSucesso }) {
     try {
       await apiRequest(`/api/livros/${livro.id}`, { method: 'DELETE' });
       onSucesso('Livro excluído.');
-      carregar(busca);
+      carregar();
     } catch (err) {
       onErro(err.message);
     }
   }
 
+  // Ordena a lista pelo campo escolhido (título, autor ou código)
+  const livrosOrdenados = [...livros].sort((a, b) => {
+    if (ordenacao === 'autor') return (a.autor || '').localeCompare(b.autor || '');
+    if (ordenacao === 'codigo') return (a.codigo || '').localeCompare(b.codigo || '');
+    return (a.titulo || '').localeCompare(b.titulo || '');
+  });
+
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>Acervo de Livros e Exemplares</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>Livros e Exemplares</Typography>
 
-      {/* Formulário simples em linha para cadastrar um novo livro */}
+      {/* Formulário simples para cadastrar ou editar livro */}
       <Paper
         component="form"
-        onSubmit={handleCriarLivro}
+        onSubmit={handleSalvarLivro}
         variant="outlined"
         sx={{ p: 2, mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}
       >
@@ -98,19 +134,51 @@ export default function Acervo({ onErro, onSucesso }) {
         <TextField size="small" label="Editora" value={editora} onChange={(e) => setEditora(e.target.value)} />
         <TextField size="small" label="Tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} />
         <TextField size="small" label="Categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} />
-        <Button type="submit" variant="contained">Cadastrar Livro</Button>
+        <Button type="submit" variant="contained">
+          {editandoId ? 'Salvar' : 'Cadastrar'}
+        </Button>
+        {editandoId && (
+          <Button variant="outlined" onClick={limparFormulario}>
+            Cancelar
+          </Button>
+        )}
       </Paper>
 
-      <TextField
-        size="small"
-        placeholder="Pesquisar livro..."
-        value={busca}
-        onChange={(e) => {
-          setBusca(e.target.value);
-          carregar(e.target.value);
-        }}
-        sx={{ mb: 2, width: 300 }}
-      />
+      {/* Barra de busca textual, filtro por categoria e ordenação */}
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+        <TextField
+          size="small"
+          placeholder="Pesquisar título, autor ou código..."
+          value={busca}
+          onChange={(e) => {
+            setBusca(e.target.value);
+            carregar(e.target.value, filtroCategoria);
+          }}
+          sx={{ width: 260 }}
+        />
+        <TextField
+          size="small"
+          placeholder="Filtrar categoria..."
+          value={filtroCategoria}
+          onChange={(e) => {
+            setFiltroCategoria(e.target.value);
+            carregar(busca, e.target.value);
+          }}
+          sx={{ width: 180 }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Ordenar por"
+          value={ordenacao}
+          onChange={(e) => setOrdenacao(e.target.value)}
+          sx={{ width: 160 }}
+        >
+          <MenuItem value="titulo">Título</MenuItem>
+          <MenuItem value="autor">Autor</MenuItem>
+          <MenuItem value="codigo">Código</MenuItem>
+        </TextField>
+      </Box>
 
       <Table size="small">
         <TableHead>
@@ -124,7 +192,7 @@ export default function Acervo({ onErro, onSucesso }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {livros.map((livro) => (
+          {livrosOrdenados.map((livro) => (
             <TableRow key={livro.id}>
               <TableCell>{livro.codigo}</TableCell>
               <TableCell>{livro.titulo}</TableCell>
@@ -132,6 +200,9 @@ export default function Acervo({ onErro, onSucesso }) {
               <TableCell>{livro.tipo || '-'} / {livro.categoria || '-'}</TableCell>
               <TableCell>{livro.exemplares_disponiveis} / {livro.total_exemplares}</TableCell>
               <TableCell>
+                <Button size="small" onClick={() => iniciarEdicao(livro)}>
+                  Editar
+                </Button>
                 <Button size="small" onClick={() => handleAdicionarExemplar(livro)}>
                   + Exemplar
                 </Button>
