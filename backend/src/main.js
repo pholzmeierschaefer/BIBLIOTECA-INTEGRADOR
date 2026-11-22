@@ -9,6 +9,7 @@ const authRoutes = require('./auth/auth.routes');
 const estudantesRoutes = require('./estudantes/estudantes.routes');
 const livrosRoutes = require('./livros/livros.routes');
 const emprestimosRoutes = require('./emprestimos/emprestimos.routes');
+const reservasRoutes = require('./reservas/reservas.routes');
 const errorHandler = require('./middlewares/erroHandler');
 
 const app = express();
@@ -27,6 +28,7 @@ app.use(['/api/auth', '/auth'], authRoutes);
 app.use(['/api/estudantes', '/estudantes'], estudantesRoutes);
 app.use(['/api/livros', '/livros'], livrosRoutes);
 app.use(['/api/emprestimos', '/emprestimos'], emprestimosRoutes);
+app.use(['/api/reservas', '/reservas'], reservasRoutes);
 
 // Middleware global de tratamento de erros (sempre por último)
 app.use(errorHandler);

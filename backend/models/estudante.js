@@ -58,13 +58,16 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  // Relacionamentos com Usuario, Emprestimo e Justificativa
+  // Relacionamentos com Usuario, Emprestimo, Reserva e Justificativa
   Estudante.associate = (models) => {
     if (models.Usuario) {
       Estudante.hasOne(models.Usuario, { foreignKey: 'estudante_id', as: 'usuario' });
     }
     if (models.Emprestimo) {
       Estudante.hasMany(models.Emprestimo, { foreignKey: 'estudante_id', as: 'emprestimos' });
+    }
+    if (models.Reserva) {
+      Estudante.hasMany(models.Reserva, { foreignKey: 'estudante_id', as: 'reservas' });
     }
     if (models.Justificativa) {
       Estudante.hasMany(models.Justificativa, { foreignKey: 'estudante_id', as: 'justificativas' });
