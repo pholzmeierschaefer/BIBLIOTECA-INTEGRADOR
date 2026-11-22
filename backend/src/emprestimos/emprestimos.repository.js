@@ -1,24 +1,18 @@
-// emprestimos.repository.js – Consultas e operações de banco de dados para Empréstimos
+// emprestimos.repository.js – Consultas e operações de banco de dados para Empréstimos e Justificativas
 
-const db = require('../../models');
-const { Emprestimo, Exemplar, Livro, Estudante, Sequelize, sequelize } = db;
+const { Emprestimo, Exemplar, Livro, Estudante, Justificativa, Sequelize, sequelize } = require('../../models');
 const { Op } = Sequelize;
 
-// Monta o JOIN padrão de Empréstimo: traz o Estudante e o Exemplar com os dados do Livro
-function montarIncludesEmprestimo() {
-  const includes = [
-    { model: Estudante, as: 'estudante' },
-    {
-      model: Exemplar,
-      as: 'exemplar',
-      include: [{ model: Livro, as: 'livro' }],
-    },
-  ];
-  if (db.Justificativa) {
-    includes.push({ model: db.Justificativa, as: 'justificativas', required: false });
-  }
-  return includes;
-}
+// JOIN padrão de Empréstimo: traz o Estudante, o Exemplar com o Livro e as Justificativas
+const INCLUDE_EMPRESTIMO = [
+  { model: Estudante, as: 'estudante' },
+  {
+    model: Exemplar,
+    as: 'exemplar',
+    include: [{ model: Livro, as: 'livro' }],
+  },
+  { model: Justificativa, as: 'justificativas' },
+];
 
 // Busca estudante pelo ID
 async function buscarEstudantePorId(id, transaction) {
@@ -42,10 +36,10 @@ async function buscarExemplarPorTombo(tombo, transaction) {
   });
 }
 
-// Busca um empréstimo pelo ID trazendo Estudante, Exemplar e Livro
+// Busca um empréstimo pelo ID trazendo Estudante, Exemplar, Livro e Justificativas
 async function buscarEmprestimoPorId(id, transaction) {
   return Emprestimo.findByPk(id, {
-    include: montarIncludesEmprestimo(),
+    include: INCLUDE_EMPRESTIMO,
     transaction,
   });
 }
@@ -62,6 +56,7 @@ async function buscarEmprestimoAtivoPorTombo(tombo, transaction) {
         where: { codigo_exemplar: { [Op.iLike]: String(tombo).trim() } },
         include: [{ model: Livro, as: 'livro' }],
       },
+      { model: Justificativa, as: 'justificativas' },
     ],
     transaction,
   });
@@ -98,7 +93,11 @@ async function listarEmprestimos({
 
   return Emprestimo.findAll({
     where,
-    include: [includeEstudante, includeExemplar],
+    include: [
+      includeEstudante,
+      includeExemplar,
+      { model: Justificativa, as: 'justificativas' },
+    ],
     order: [['data_emprestimo', 'DESC']],
   });
 }
@@ -148,12 +147,48 @@ async function atualizarEstudante(estudante, dados, transaction) {
   return estudante.update(dados, { transaction });
 }
 
-// Remove um empréstimo do banco
+// Remove um empréstimo e suas justificativas vinculadas
 async function excluirEmprestimo(emprestimoId, transaction) {
-  if (db.Justificativa) {
-    await db.Justificativa.destroy({ where: { emprestimo_id: emprestimoId }, transaction });
-  }
+  await Justificativa.destroy({ where: { emprestimo_id: emprestimoId }, transaction });
   return Emprestimo.destroy({ where: { id: emprestimoId }, transaction });
+}
+
+// --- Consultas de Justificativas de Atraso ---
+
+// Cria uma nova justificativa de atraso para um empréstimo
+async function criarJustificativa(dados, transaction) {
+  return Justificativa.create(dados, { transaction });
+}
+
+// Lista todas as justificativas enviadas pelos estudantes, trazendo os dados do aluno e do livro
+async function listarJustificativas() {
+  return Justificativa.findAll({
+    include: [
+      { model: Estudante, as: 'estudante' },
+      {
+        model: Emprestimo,
+        as: 'emprestimo',
+        include: [
+          {
+            model: Exemplar,
+            as: 'exemplar',
+            include: [{ model: Livro, as: 'livro' }],
+          },
+        ],
+      },
+    ],
+    order: [['data_envio', 'DESC']],
+  });
+}
+
+// Busca uma justificativa pelo ID
+async function buscarJustificativaPorId(id) {
+  return Justificativa.findByPk(id);
+}
+
+// Atualiza o status de uma justificativa (ex: 'analisada')
+async function atualizarJustificativa(justificativa, dados) {
+  return justificativa.update(dados);
 }
 
 // Marca automaticamente empréstimos vencidos como 'atrasado' e bloqueia os estudantes em atraso
@@ -201,6 +236,10 @@ module.exports = {
   atualizarExemplar,
   atualizarEstudante,
   excluirEmprestimo,
+  criarJustificativa,
+  listarJustificativas,
+  buscarJustificativaPorId,
+  atualizarJustificativa,
   sincronizarAtrasos,
   executarTransacao,
 };

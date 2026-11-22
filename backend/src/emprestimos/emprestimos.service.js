@@ -1,4 +1,4 @@
-// emprestimos.service.js – Regras de negócio de Empréstimos, Devoluções, Renovações e Dashboard
+// emprestimos.service.js – Regras de negócio de Empréstimos, Devoluções, Renovações, Justificativas e Dashboard
 
 const emprestimosRepository = require('./emprestimos.repository');
 
@@ -27,12 +27,18 @@ function calcularDiasAtraso(dataPrevista, referencia = new Date()) {
   return diffMs > 0 ? Math.max(1, Math.floor(diffMs / MS_POR_DIA)) : 0;
 }
 
-// Formata os dados do empréstimo para resposta JSON (incluindo estudante, exemplar e livro)
+// Formata os dados do empréstimo para resposta JSON (incluindo estudante, exemplar, livro e justificativas)
 function formatarEmprestimo(emprestimo, referencia = new Date()) {
   const emAberto = emprestimo.data_devolucao_realizada === null;
   const diasAtraso = emAberto ? calcularDiasAtraso(emprestimo.data_devolucao_prevista, referencia) : 0;
   const atrasado = emAberto && diasAtraso > 0;
   const livroObj = emprestimo.exemplar?.livro;
+  const justificativas = (emprestimo.justificativas || []).map((j) => ({
+    id: j.id,
+    texto_descritivo: j.texto_descritivo,
+    data_envio: j.data_envio,
+    status: j.status,
+  }));
 
   return {
     id: emprestimo.id,
@@ -68,6 +74,8 @@ function formatarEmprestimo(emprestimo, referencia = new Date()) {
             : null,
         }
       : null,
+    justificativa_atraso: justificativas[0]?.texto_descritivo || null,
+    justificativas,
   };
 }
 
@@ -309,6 +317,73 @@ async function excluirEmprestimo(emprestimoId) {
   });
 }
 
+// --- Regras de Negócio: Justificativas de Atraso ---
+
+// 10. Registra uma justificativa de atraso enviada pelo estudante para um empréstimo
+async function enviarJustificativaAtraso(emprestimoId, textoJustificativa) {
+  const textoLimpo = String(textoJustificativa || '').trim();
+  if (textoLimpo.length < 5) {
+    throw criarErroHttp(400, 'A justificativa de atraso deve conter ao menos 5 caracteres.');
+  }
+
+  const emprestimo = await emprestimosRepository.buscarEmprestimoPorId(emprestimoId);
+  if (!emprestimo) throw criarErroHttp(404, 'Empréstimo não encontrado.');
+
+  const justificativa = await emprestimosRepository.criarJustificativa({
+    emprestimo_id: emprestimo.id,
+    estudante_id: emprestimo.estudante_id,
+    texto_descritivo: textoLimpo,
+    data_envio: new Date(),
+    status: 'pendente',
+  });
+
+  const atualizado = await emprestimosRepository.buscarEmprestimoPorId(emprestimo.id);
+  return {
+    mensagem: 'Justificativa de atraso registrada com sucesso.',
+    justificativa,
+    emprestimo: formatarEmprestimo(atualizado),
+  };
+}
+
+// 11. Lista todas as justificativas de atraso enviadas pelos estudantes
+async function listarJustificativas() {
+  const lista = await emprestimosRepository.listarJustificativas();
+  return lista.map((item) => {
+    const livroObj = item.emprestimo?.exemplar?.livro;
+    return {
+      id: item.id,
+      emprestimo_id: item.emprestimo_id,
+      texto_descritivo: item.texto_descritivo,
+      data_envio: item.data_envio,
+      status: item.status,
+      estudante: item.estudante
+        ? {
+            id: item.estudante.id,
+            matricula: item.estudante.matricula,
+            nome: item.estudante.nome_completo,
+            turma: item.estudante.turma,
+          }
+        : null,
+      livro: livroObj
+        ? {
+            codigo: livroObj.codigo_livro,
+            titulo: livroObj.titulo,
+            exemplar_tombo: item.emprestimo.exemplar.codigo_exemplar,
+          }
+        : null,
+    };
+  });
+}
+
+// 12. Marca uma justificativa de atraso como 'analisada' pelo bibliotecário
+async function marcarJustificativaAnalisada(justificativaId) {
+  const justificativa = await emprestimosRepository.buscarJustificativaPorId(justificativaId);
+  if (!justificativa) throw criarErroHttp(404, 'Justificativa não encontrada.');
+
+  await emprestimosRepository.atualizarJustificativa(justificativa, { status: 'analisada' });
+  return { mensagem: 'Justificativa marcada como analisada.', justificativa };
+}
+
 module.exports = {
   listarEmprestimos,
   buscarEmprestimoPorId,
@@ -319,4 +394,7 @@ module.exports = {
   registrarRenovacao,
   obterDashboard,
   listarMeusEmprestimos,
+  enviarJustificativaAtraso,
+  listarJustificativas,
+  marcarJustificativaAnalisada,
 };

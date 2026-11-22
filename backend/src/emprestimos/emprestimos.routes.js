@@ -1,4 +1,4 @@
-// emprestimos.routes.js – Definição das rotas HTTP protegidas para o módulo de Empréstimos
+// emprestimos.routes.js – Definição das rotas HTTP protegidas para Empréstimos e Justificativas
 
 const express = require('express');
 const emprestimosController = require('./emprestimos.controller');
@@ -13,6 +13,8 @@ router.use(autenticar);
 // --- Rotas Fixas (registradas antes de /:id para evitar conflito de parâmetros na URL) ---
 router.get('/dashboard', autorizar('bibliotecario'), emprestimosController.obterDashboard); // Indicadores e atrasos
 router.get('/meus', emprestimosController.listarMeusEmprestimos); // Empréstimos do aluno logado ou por ?matricula=
+router.get('/justificativas', autorizar('bibliotecario'), emprestimosController.listarJustificativas); // Lista justificativas
+router.put('/justificativas/:id/analisar', autorizar('bibliotecario'), emprestimosController.marcarJustificativaAnalisada); // Marca justificativa analisada
 router.put('/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolução rápida via body
 
 // --- CRUD e Operações de Balcão (/api/emprestimos) ---
@@ -23,5 +25,6 @@ router.put('/:id', autorizar('bibliotecario'), emprestimosController.editarEmpre
 router.delete('/:id', autorizar('bibliotecario'), emprestimosController.excluirEmprestimo); // Exclui empréstimo
 router.put('/:id/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolve pelo ID ou tombo
 router.put('/:id/renovar', autorizar('bibliotecario'), emprestimosController.registrarRenovacao); // Renova por +7 dias
+router.put('/:id/justificativa', emprestimosController.enviarJustificativaAtraso); // Envia justificativa de atraso
 
 module.exports = router;

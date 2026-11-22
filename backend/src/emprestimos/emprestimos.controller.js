@@ -1,4 +1,4 @@
-// emprestimos.controller.js – Recebe as requisições HTTP de Empréstimos, valida dados básicos e chama o Service
+// emprestimos.controller.js – Recebe as requisições HTTP de Empréstimos e Justificativas, valida dados básicos e chama o Service
 
 const emprestimosService = require('./emprestimos.service');
 
@@ -124,6 +124,48 @@ async function excluirEmprestimo(req, res, next) {
   }
 }
 
+// --- Justificativas de Atraso ---
+
+// PUT /api/emprestimos/:id/justificativa – Envia uma justificativa de atraso para o empréstimo
+async function enviarJustificativaAtraso(req, res, next) {
+  try {
+    const texto =
+      req.body.justificativa_atraso ?? req.body.texto_descritivo ?? req.body.justificativa;
+
+    if (!texto?.trim()) {
+      return res.status(400).json({ erro: 'O texto da justificativa de atraso é obrigatório.' });
+    }
+
+    const resultado = await emprestimosService.enviarJustificativaAtraso(
+      Number(req.params.id),
+      texto
+    );
+    return res.status(200).json(resultado);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// GET /api/emprestimos/justificativas – Lista todas as justificativas enviadas pelos alunos
+async function listarJustificativas(req, res, next) {
+  try {
+    const lista = await emprestimosService.listarJustificativas();
+    return res.status(200).json(lista);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// PUT /api/emprestimos/justificativas/:id/analisar – Marca uma justificativa como 'analisada'
+async function marcarJustificativaAnalisada(req, res, next) {
+  try {
+    const resultado = await emprestimosService.marcarJustificativaAnalisada(Number(req.params.id));
+    return res.status(200).json(resultado);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 module.exports = {
   listarEmprestimos,
   buscarEmprestimoPorId,
@@ -134,4 +176,7 @@ module.exports = {
   registrarRenovacao,
   obterDashboard,
   listarMeusEmprestimos,
+  enviarJustificativaAtraso,
+  listarJustificativas,
+  marcarJustificativaAnalisada,
 };
