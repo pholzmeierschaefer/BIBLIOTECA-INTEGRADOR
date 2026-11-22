@@ -1,111 +1,70 @@
-// livros.service.js – Regras de negócio para o gerenciamento de Livros e Exemplares
+// livros.service.js – Regras de negócio para Livros e Exemplares físicos
 
 const livrosRepository = require('./livros.repository');
 
-// Converte os status aceitos na API para os valores salvos no banco
-const STATUS_API_PARA_DB = {
-  disponivel: 'disponivel',
-  emprestado: 'emprestado',
-  reservado: 'reservado',
-  retido_reserva: 'reservado',
-  inativo: 'inativo_extraviado',
-  inativo_extraviado: 'inativo_extraviado',
-};
+const STATUS_VALIDOS = ['disponivel', 'emprestado', 'reservado', 'inativo'];
 
-// Converte o status do banco para o nome amigável exibido na API
-const STATUS_DB_PARA_API = {
-  disponivel: 'disponivel',
-  emprestado: 'emprestado',
-  reservado: 'retido_reserva',
-  inativo: 'inativo',
-  inativo_extraviado: 'inativo',
-};
-
-const STATUS_VALIDOS_API = ['disponivel', 'emprestado', 'inativo', 'retido_reserva', 'reservado'];
-
-// Cria um erro padronizado com código HTTP (400, 404, 409)
-function criarErroHttp(statusCode, mensagem, codigo) {
+// Cria um erro padronizado com statusCode HTTP (400, 404, 409) para o erroHandler capturar
+function criarErroHttp(statusCode, mensagem) {
   const err = new Error(mensagem);
   err.statusCode = statusCode;
-  if (codigo) err.codigo = codigo;
   return err;
 }
 
-// Formata os dados de um exemplar físico para resposta JSON
+// Formata o objeto de um exemplar físico para devolver no JSON da API
 function formatarExemplar(exemplar) {
   return {
     id: exemplar.id,
     codigo_tombo: exemplar.codigo_exemplar,
-    codigo_exemplar: exemplar.codigo_exemplar,
     livro_id: exemplar.livro_id,
-    status: STATUS_DB_PARA_API[exemplar.status] || exemplar.status,
-    ...(exemplar.livro && {
+    status: exemplar.status === 'inativo_extraviado' ? 'inativo' : exemplar.status,
+    ...(exemplar.livro && { // Se a consulta trouxe os dados do livro pai, inclui um resumo dele
       livro: {
         id: exemplar.livro.id,
         codigo: exemplar.livro.codigo_livro,
         titulo: exemplar.livro.titulo,
         autor: exemplar.livro.autor,
-        editora: exemplar.livro.editora,
       },
     }),
-    created_at: exemplar.created_at,
-    updated_at: exemplar.updated_at,
   };
 }
 
-// Formata os dados do livro e calcula o resumo de disponibilidade dos exemplares em tempo real
-function formatarLivro(livro, { incluirExemplares = false } = {}) {
-  const exemplares = Array.isArray(livro.exemplares) ? livro.exemplares : [];
-
+// Formata os dados do livro e calcula automaticamente quantos exemplares estão disponíveis
+function formatarLivro(livro, incluirExemplares = false) {
+  const exemplares = livro.exemplares || [];
   const disponiveis = exemplares.filter((ex) => ex.status === 'disponivel').length;
-  const emprestados = exemplares.filter((ex) => ex.status === 'emprestado').length;
-  const reservados = exemplares.filter((ex) => ex.status === 'reservado').length;
-  const inativos = exemplares.filter((ex) => ex.status.startsWith('inativo')).length;
 
-  const resultado = {
+  return {
     id: livro.id,
     codigo: livro.codigo_livro,
-    codigo_livro: livro.codigo_livro,
     titulo: livro.titulo,
     autor: livro.autor,
     editora: livro.editora,
     ano_publicacao: livro.ano_publicacao,
-    tipo: livro.tipo || null,
-    categoria: livro.categoria || null,
-    total_exemplares_ativos: disponiveis + emprestados + reservados,
+    tipo: livro.tipo,
+    categoria: livro.categoria,
+    total_exemplares: exemplares.length,
     exemplares_disponiveis: disponiveis,
-    disponivel_para_emprestimo: disponiveis > 0,
-    resumo_exemplares: {
-      disponiveis,
-      emprestados,
-      retidos_reserva: reservados,
-      inativos,
-    },
-    created_at: livro.created_at,
-    updated_at: livro.updated_at,
+    disponivel_para_emprestimo: disponiveis > 0, // true se houver ao menos 1 exemplar livre na estante
+    ...(incluirExemplares && { exemplares: exemplares.map(formatarExemplar) }),
   };
-
-  if (incluirExemplares) {
-    resultado.exemplares = exemplares.map(formatarExemplar);
-  }
-
-  return resultado;
 }
 
-// Localiza um livro aceitando tanto o código do livro (ex: LIV-001) quanto o ID numérico
-async function localizarLivroPorCodigoOuId(identificador) {
-  const valor = String(identificador).trim();
+// Busca um livro aceitando tanto o código (ex: "LIV-01") quanto o ID numérico na URL
+async function localizarLivro(idOuCodigo) {
+  const valor = String(idOuCodigo).trim();
   let livro = await livrosRepository.buscarLivroPorCodigo(valor);
 
-  if (!livro && /^\d+$/.test(valor)) {
+  if (!livro && /^\d+$/.test(valor)) { // Se não achou pelo código e for apenas números, busca pelo ID
     livro = await livrosRepository.buscarLivroPorId(Number(valor));
   }
+  if (!livro) throw criarErroHttp(404, 'Livro não encontrado.');
   return livro;
 }
 
-// --- Serviços de Livros ---
+// --- Regras de Negócio: Livros ---
 
-// Lista todos os livros aplicando filtros opcionais
+// Lista livros do acervo aplicando filtros de busca
 async function listarLivros(filtros = {}) {
   const livros = await livrosRepository.listarLivros({
     titulo: filtros.titulo,
@@ -119,241 +78,157 @@ async function listarLivros(filtros = {}) {
   return livros.map((livro) => formatarLivro(livro));
 }
 
-// Busca um livro específico por ID ou código junto com sua lista de exemplares
+// Busca um único livro pelo ID ou código, incluindo a lista dos seus exemplares
 async function buscarLivroPorId(idOuCodigo) {
-  const livro = await localizarLivroPorCodigoOuId(idOuCodigo);
-  if (!livro) {
-    throw criarErroHttp(404, 'Livro não encontrado.', 'LIVRO_NAO_ENCONTRADO');
-  }
-
-  return formatarLivro(livro, { incluirExemplares: true });
+  const livro = await localizarLivro(idOuCodigo);
+  return formatarLivro(livro, true);
 }
 
-// Cadastra um novo livro no acervo validando duplicidade de código
+// Cadastra um novo livro verificando antes se o código já existe
 async function criarLivro(dados) {
-  const codigoLimpo = String(dados.codigo || dados.codigo_livro).trim();
-  const existente = await livrosRepository.buscarLivroPorCodigo(codigoLimpo);
+  const codigo = String(dados.codigo || dados.codigo_livro).trim();
 
-  if (existente) {
-    throw criarErroHttp(
-      409,
-      `Já existe um livro cadastrado com o código "${codigoLimpo}".`,
-      'CODIGO_LIVRO_DUPLICADO'
-    );
+  if (await livrosRepository.buscarLivroPorCodigo(codigo)) {
+    throw criarErroHttp(409, `Já existe um livro cadastrado com o código "${codigo}".`);
   }
 
   const novoLivro = await livrosRepository.criarLivro({
-    codigo_livro: codigoLimpo,
+    codigo_livro: codigo,
     titulo: String(dados.titulo).trim(),
     autor: String(dados.autor).trim(),
-    editora: dados.editora ? String(dados.editora).trim() : null,
+    editora: dados.editora?.trim() || null,
     ano_publicacao: dados.ano_publicacao ? Number(dados.ano_publicacao) : null,
-    tipo: dados.tipo ? String(dados.tipo).trim() : null,
-    categoria: dados.categoria ? String(dados.categoria).trim() : null,
+    tipo: dados.tipo?.trim() || null,
+    categoria: dados.categoria?.trim() || null,
   });
 
-  const livroCompleto = await livrosRepository.buscarLivroPorId(novoLivro.id);
-  return formatarLivro(livroCompleto, { incluirExemplares: true });
+  return formatarLivro(novoLivro, true);
 }
 
 // Atualiza os dados de um livro existente
 async function editarLivro(idOuCodigo, dados) {
-  const livro = await localizarLivroPorCodigoOuId(idOuCodigo);
-  if (!livro) {
-    throw criarErroHttp(404, 'Livro não encontrado.', 'LIVRO_NAO_ENCONTRADO');
-  }
-
-  const camposAtualizados = {};
+  const livro = await localizarLivro(idOuCodigo);
   const novoCodigo = dados.codigo ?? dados.codigo_livro;
 
-  // Se o código do livro mudou, verifica se já não está em uso por outro livro
-  if (novoCodigo !== undefined) {
-    const codigoLimpo = String(novoCodigo).trim();
-    if (codigoLimpo.toLowerCase() !== livro.codigo_livro.toLowerCase()) {
-      const duplicado = await livrosRepository.buscarLivroPorCodigo(codigoLimpo);
-      if (duplicado && duplicado.id !== livro.id) {
-        throw criarErroHttp(
-          409,
-          `Já existe outro livro cadastrado com o código "${codigoLimpo}".`,
-          'CODIGO_LIVRO_DUPLICADO'
-        );
-      }
-      camposAtualizados.codigo_livro = codigoLimpo;
+  // Se o usuário estiver trocando o código do livro, garante que o novo código não pertença a outro livro
+  if (novoCodigo && String(novoCodigo).trim().toLowerCase() !== livro.codigo_livro.toLowerCase()) {
+    const duplicado = await livrosRepository.buscarLivroPorCodigo(novoCodigo);
+    if (duplicado && duplicado.id !== livro.id) {
+      throw criarErroHttp(409, `Já existe outro livro com o código "${novoCodigo}".`);
     }
   }
 
-  if (dados.titulo !== undefined) camposAtualizados.titulo = String(dados.titulo).trim();
-  if (dados.autor !== undefined) camposAtualizados.autor = String(dados.autor).trim();
-  if (dados.editora !== undefined) {
-    camposAtualizados.editora = dados.editora ? String(dados.editora).trim() : null;
-  }
-  if (dados.ano_publicacao !== undefined) {
-    camposAtualizados.ano_publicacao = dados.ano_publicacao ? Number(dados.ano_publicacao) : null;
-  }
-  if (dados.tipo !== undefined) {
-    camposAtualizados.tipo = dados.tipo ? String(dados.tipo).trim() : null;
-  }
-  if (dados.categoria !== undefined) {
-    camposAtualizados.categoria = dados.categoria ? String(dados.categoria).trim() : null;
-  }
+  await livrosRepository.atualizarLivro(livro, {
+    ...(novoCodigo !== undefined && { codigo_livro: String(novoCodigo).trim() }),
+    ...(dados.titulo !== undefined && { titulo: String(dados.titulo).trim() }),
+    ...(dados.autor !== undefined && { autor: String(dados.autor).trim() }),
+    ...(dados.editora !== undefined && { editora: dados.editora?.trim() || null }),
+    ...(dados.ano_publicacao !== undefined && {
+      ano_publicacao: dados.ano_publicacao ? Number(dados.ano_publicacao) : null,
+    }),
+    ...(dados.tipo !== undefined && { tipo: dados.tipo?.trim() || null }),
+    ...(dados.categoria !== undefined && { categoria: dados.categoria?.trim() || null }),
+  });
 
-  await livrosRepository.atualizarLivro(livro, camposAtualizados);
-  const livroAtualizado = await livrosRepository.buscarLivroPorId(livro.id);
-  return formatarLivro(livroAtualizado, { incluirExemplares: true });
+  const atualizado = await livrosRepository.buscarLivroPorId(livro.id);
+  return formatarLivro(atualizado, true);
 }
 
-// Exclui um livro caso não possua exemplares emprestados ou reservados
+// Exclui um livro do acervo (bloqueia a exclusão se houver algum exemplar emprestado no momento)
 async function excluirLivro(idOuCodigo) {
-  const livro = await localizarLivroPorCodigoOuId(idOuCodigo);
-  if (!livro) {
-    throw criarErroHttp(404, 'Livro não encontrado.', 'LIVRO_NAO_ENCONTRADO');
-  }
+  const livro = await localizarLivro(idOuCodigo);
+  const possuiEmprestado = (livro.exemplares || []).some((ex) => ex.status === 'emprestado');
 
-  const exemplares = livro.exemplares || [];
-  if (exemplares.some((ex) => ex.status === 'emprestado')) {
+  if (possuiEmprestado) {
     throw criarErroHttp(409, 'Não é possível excluir o livro pois há exemplares emprestados.');
-  }
-  if (exemplares.some((ex) => ex.status === 'reservado')) {
-    throw criarErroHttp(409, 'Não é possível excluir o livro pois há exemplares reservados.');
   }
 
   await livrosRepository.excluirLivro(livro.id);
 }
 
-// --- Serviços de Exemplares Físicos ---
+// --- Regras de Negócio: Exemplares Físicos ---
 
-// Lista todos os exemplares físicos de um livro específico
-async function listarExemplaresDoLivro(codigoOuId, filtroStatus) {
-  const livro = await localizarLivroPorCodigoOuId(codigoOuId);
-  if (!livro) {
-    throw criarErroHttp(404, 'Livro não encontrado.', 'LIVRO_NAO_ENCONTRADO');
-  }
-
-  let statusDb = null;
-  if (filtroStatus) {
-    statusDb = STATUS_API_PARA_DB[String(filtroStatus).trim().toLowerCase()];
-    if (!statusDb) {
-      throw criarErroHttp(400, `Status inválido. Permitidos: ${STATUS_VALIDOS_API.join(', ')}.`);
-    }
-  }
-
-  const exemplares = await livrosRepository.listarExemplaresPorLivro(livro.id, statusDb);
+// Lista todos os exemplares físicos que pertencem a um livro
+async function listarExemplaresDoLivro(codigoOuId, status) {
+  const livro = await localizarLivro(codigoOuId);
+  const exemplares = await livrosRepository.listarExemplaresPorLivro(livro.id, status);
 
   return {
-    livro: {
-      id: livro.id,
-      codigo: livro.codigo_livro,
-      titulo: livro.titulo,
-      autor: livro.autor,
-    },
+    livro: { id: livro.id, codigo: livro.codigo_livro, titulo: livro.titulo },
     total: exemplares.length,
     exemplares: exemplares.map(formatarExemplar),
   };
 }
 
-// Cadastra um novo exemplar físico (código de tombo único) vinculado a um livro
+// Cadastra um novo exemplar físico (etiqueta de tombo) vinculado ao livro
 async function cadastrarExemplar(codigoOuId, dados) {
-  const livro = await localizarLivroPorCodigoOuId(codigoOuId);
-  if (!livro) {
-    throw criarErroHttp(404, 'Livro não encontrado.', 'LIVRO_NAO_ENCONTRADO');
-  }
-
+  const livro = await localizarLivro(codigoOuId);
   const codigoTombo = String(dados.codigo_tombo || dados.codigo_exemplar).trim();
-  const existente = await livrosRepository.buscarExemplarPorTombo(codigoTombo);
 
-  if (existente) {
-    throw criarErroHttp(
-      409,
-      `Já existe um exemplar cadastrado com o código de tombo "${codigoTombo}".`,
-      'TOMBO_DUPLICADO'
-    );
+  if (await livrosRepository.buscarExemplarPorTombo(codigoTombo)) {
+    throw criarErroHttp(409, `Já existe um exemplar com o código de tombo "${codigoTombo}".`);
   }
 
-  let statusDb = 'disponivel';
-  if (dados.status) {
-    statusDb = STATUS_API_PARA_DB[String(dados.status).trim().toLowerCase()];
-    if (!statusDb) {
-      throw criarErroHttp(400, `Status inválido. Permitidos: ${STATUS_VALIDOS_API.join(', ')}.`);
-    }
+  const status = dados.status ? String(dados.status).trim().toLowerCase() : 'disponivel';
+  if (!STATUS_VALIDOS.includes(status)) {
+    throw criarErroHttp(400, `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}.`);
   }
 
-  const exemplarCriado = await livrosRepository.criarExemplar({
+  const criado = await livrosRepository.criarExemplar({
     codigo_exemplar: codigoTombo,
     livro_id: livro.id,
-    status: statusDb,
+    status,
   });
 
-  const exemplarCompleto = await livrosRepository.buscarExemplarPorTombo(
-    exemplarCriado.codigo_exemplar
-  );
-  return formatarExemplar(exemplarCompleto);
+  const completo = await livrosRepository.buscarExemplarPorTombo(criado.codigo_exemplar);
+  return formatarExemplar(completo);
 }
 
-// Busca um exemplar físico específico pelo código de tombo
+// Busca os detalhes de um exemplar físico pelo código de tombo
 async function buscarExemplarPorTombo(tombo) {
   const exemplar = await livrosRepository.buscarExemplarPorTombo(tombo);
-  if (!exemplar) {
-    throw criarErroHttp(404, 'Exemplar não encontrado.', 'EXEMPLAR_NAO_ENCONTRADO');
-  }
+  if (!exemplar) throw criarErroHttp(404, 'Exemplar não encontrado.');
   return formatarExemplar(exemplar);
 }
 
-// Atualiza o código de tombo ou o status de um exemplar físico
+// Edita o código de tombo ou o status de um exemplar físico
 async function editarExemplar(tombo, dados) {
   const exemplar = await livrosRepository.buscarExemplarPorTombo(tombo);
-  if (!exemplar) {
-    throw criarErroHttp(404, 'Exemplar não encontrado.', 'EXEMPLAR_NAO_ENCONTRADO');
-  }
+  if (!exemplar) throw criarErroHttp(404, 'Exemplar não encontrado.');
 
-  const camposAtualizados = {};
   const novoTombo = dados.codigo_tombo ?? dados.codigo_exemplar;
-
-  // Valida se o novo código de tombo já não pertence a outro exemplar
-  if (novoTombo !== undefined) {
-    const tomboLimpo = String(novoTombo).trim();
-    if (!tomboLimpo) {
-      throw criarErroHttp(400, 'O código de tombo não pode ficar vazio.');
-    }
-    if (tomboLimpo.toLowerCase() !== exemplar.codigo_exemplar.toLowerCase()) {
-      const duplicado = await livrosRepository.buscarExemplarPorTombo(tomboLimpo);
-      if (duplicado && duplicado.id !== exemplar.id) {
-        throw criarErroHttp(409, `Já existe outro exemplar com o código de tombo "${tomboLimpo}".`);
-      }
-      camposAtualizados.codigo_exemplar = tomboLimpo;
+  if (novoTombo && String(novoTombo).trim().toLowerCase() !== exemplar.codigo_exemplar.toLowerCase()) {
+    const duplicado = await livrosRepository.buscarExemplarPorTombo(novoTombo);
+    if (duplicado && duplicado.id !== exemplar.id) {
+      throw criarErroHttp(409, `Já existe outro exemplar com o tombo "${novoTombo}".`);
     }
   }
 
-  if (dados.status !== undefined) {
-    const novoStatusDb = STATUS_API_PARA_DB[String(dados.status).trim().toLowerCase()];
-    if (!novoStatusDb) {
-      throw criarErroHttp(400, `Status inválido. Permitidos: ${STATUS_VALIDOS_API.join(', ')}.`);
-    }
-    camposAtualizados.status = novoStatusDb;
+  if (dados.status && !STATUS_VALIDOS.includes(String(dados.status).trim().toLowerCase())) {
+    throw criarErroHttp(400, `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}.`);
   }
 
-  await livrosRepository.atualizarExemplar(exemplar, camposAtualizados);
-  const atualizado = await livrosRepository.buscarExemplarPorTombo(
-    camposAtualizados.codigo_exemplar || exemplar.codigo_exemplar
-  );
-  return formatarExemplar(atualizado);
+  await livrosRepository.atualizarExemplar(exemplar, {
+    ...(novoTombo !== undefined && { codigo_exemplar: String(novoTombo).trim() }),
+    ...(dados.status !== undefined && { status: String(dados.status).trim().toLowerCase() }),
+  });
+
+  return formatarExemplar(exemplar);
 }
 
-// Exclui um exemplar físico caso não esteja emprestado nem reservado
+// Exclui um exemplar físico caso ele não esteja emprestado
 async function excluirExemplar(tombo) {
   const exemplar = await livrosRepository.buscarExemplarPorTombo(tombo);
-  if (!exemplar) {
-    throw criarErroHttp(404, 'Exemplar não encontrado.', 'EXEMPLAR_NAO_ENCONTRADO');
-  }
+  if (!exemplar) throw criarErroHttp(404, 'Exemplar não encontrado.');
 
-  if (exemplar.status === 'emprestado' || exemplar.status === 'reservado') {
-    throw criarErroHttp(409, 'Não é possível excluir um exemplar que está emprestado ou reservado.');
+  if (exemplar.status === 'emprestado') {
+    throw criarErroHttp(409, 'Não é possível excluir um exemplar que está emprestado.');
   }
 
   await livrosRepository.excluirExemplar(exemplar);
 }
 
 module.exports = {
-  STATUS_VALIDOS_API,
   listarLivros,
   buscarLivroPorId,
   criarLivro,
