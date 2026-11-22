@@ -9,21 +9,21 @@ async function executarSeed() {
     await db.sequelize.authenticate();
     await db.sequelize.sync({ force: resetar, alter: !resetar });
 
-    const senhaAdmin = await bcrypt.hash('admin123', 12);
+    const senhaBibliotecario = await bcrypt.hash('bibliotecario', 12);
 
-    // 1. Garante o usuário Administrador (Bibliotecário)
-    const [admin] = await db.Usuario.findOrCreate({
-      where: { matricula: 'admin' },
+    // 1. Garante o usuário Bibliotecário
+    const [bibliotecario] = await db.Usuario.findOrCreate({
+      where: { matricula: 'bibliotecario' },
       defaults: {
-        nome: 'Administrador',
-        matricula: 'admin',
-        email: 'admin@biblioteca.com',
-        senha: senhaAdmin,
+        nome: 'Bibliotecário',
+        matricula: 'bibliotecario',
+        email: 'bibliotecario@biblioteca.com',
+        senha: senhaBibliotecario,
         role: 'bibliotecario',
       },
     });
-    if (admin.role !== 'bibliotecario') {
-      await admin.update({ role: 'bibliotecario' });
+    if (bibliotecario.role !== 'bibliotecario') {
+      await bibliotecario.update({ role: 'bibliotecario' });
     }
 
     // 2. Garante um Estudante e sua conta de login para testes
@@ -75,7 +75,7 @@ async function executarSeed() {
     });
 
     console.log('Seed executado com sucesso!');
-    console.log('Login Admin -> Matrícula: admin | Senha: admin123');
+    console.log('Login Bibliotecário -> Matrícula: bibliotecario | Senha: bibliotecario');
     console.log('Login Aluno -> Matrícula: 2026001 | Senha: 2026001');
     process.exit(0);
   } catch (err) {

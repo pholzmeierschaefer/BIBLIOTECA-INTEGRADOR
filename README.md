@@ -51,5 +51,5 @@ Acesse no navegador: `http://localhost:5173`.
 
 ## Logins de Teste (após `yarn seed`)
 
-- **Admin:** matrícula `admin` | senha `admin123`
+- **Bibliotecário:** matrícula `bibliotecario` | senha `bibliotecario`
 - **Estudante:** matrícula `2026001` | senha `2026001`

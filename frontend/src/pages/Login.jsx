@@ -46,7 +46,7 @@ export default function Login({ onLogin }) {
             variant={perfil === 'administrador' ? 'contained' : 'outlined'}
             onClick={() => setPerfil('administrador')}
           >
-            Admin
+            Bibliotecário
           </Button>
         </Box>
 
