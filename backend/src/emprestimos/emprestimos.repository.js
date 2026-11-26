@@ -1,9 +1,12 @@
-// emprestimos.repository.js – Consultas e operações de banco de dados para Empréstimos e Justificativas
+// emprestimos.repository.js – Camada Repository (Acesso direto ao PostgreSQL via Sequelize)
+// [RESUMO 1 - Repository | RELATÓRIO 2.1d & 3.4]
+// Por que está aqui: isola todos os comandos de banco de dados (SELECT, INSERT, UPDATE, DELETE) do resto do código
+// usando o ORM Sequelize, que gera queries parametrizadas protegendo contra SQL Injection.
 
 const { Emprestimo, Exemplar, Livro, Estudante, Justificativa, Sequelize, sequelize } = require('../../models');
-const { Op } = Sequelize;
+const { Op } = Sequelize; // Operadores SQL do Sequelize: iLike (busca sem case), lt (menor que), in (lista), ne (diferente)
 
-// JOIN padrão de Empréstimo: traz o Estudante, o Exemplar com o Livro e as Justificativas
+// JOIN padrão de Empréstimo: sempre traz junto o Estudante, o Exemplar (com o Livro pai) e as Justificativas
 const INCLUDE_EMPRESTIMO = [
   { model: Estudante, as: 'estudante' },
   {
@@ -14,12 +17,12 @@ const INCLUDE_EMPRESTIMO = [
   { model: Justificativa, as: 'justificativas' },
 ];
 
-// Busca estudante pelo ID
+// Busca estudante pela chave primária (ID)
 async function buscarEstudantePorId(id, transaction) {
   return Estudante.findByPk(id, { transaction });
 }
 
-// Busca estudante pela matrícula escolar
+// Busca estudante pela matrícula escolar ignorando maiúsculas/minúsculas (Op.iLike)
 async function buscarEstudantePorMatricula(matricula, transaction) {
   return Estudante.findOne({
     where: { matricula: { [Op.iLike]: String(matricula).trim() } },
@@ -44,7 +47,7 @@ async function buscarEmprestimoPorId(id, transaction) {
   });
 }
 
-// Busca um empréstimo que ainda não foi devolvido a partir do código de tombo do exemplar
+// Busca um empréstimo que ainda não foi devolvido (data_devolucao_realizada: null) pelo tombo do exemplar
 async function buscarEmprestimoAtivoPorTombo(tombo, transaction) {
   return Emprestimo.findOne({
     where: { data_devolucao_realizada: null },
@@ -78,7 +81,7 @@ async function listarEmprestimos({
   const includeEstudante = { model: Estudante, as: 'estudante' };
   if (estudanteMatricula) {
     includeEstudante.where = { matricula: { [Op.iLike]: String(estudanteMatricula).trim() } };
-    includeEstudante.required = true;
+    includeEstudante.required = true; // required: true transforma em INNER JOIN quando há filtro
   }
 
   const includeExemplar = {
@@ -98,11 +101,12 @@ async function listarEmprestimos({
       includeExemplar,
       { model: Justificativa, as: 'justificativas' },
     ],
-    order: [['data_emprestimo', 'DESC']],
+    order: [['data_emprestimo', 'DESC']], // Ordena dos empréstimos mais recentes para os mais antigos
   });
 }
 
-// Conta quantos livros o estudante está em posse no momento (ainda não devolvidos)
+// [RESUMO 3] Conta quantos livros o estudante ainda NÃO devolveu (data_devolucao_realizada === null)
+// Usado para validar o limite máximo de 2 empréstimos simultâneos
 async function contarEmprestimosAtivosDoEstudante(estudanteId, transaction) {
   return Emprestimo.count({
     where: { estudante_id: estudanteId, data_devolucao_realizada: null },
@@ -110,7 +114,7 @@ async function contarEmprestimosAtivosDoEstudante(estudanteId, transaction) {
   });
 }
 
-// Conta quantos empréstimos vencidos (data prevista menor que agora) o estudante possui
+// Conta quantos empréstimos vencidos (data prevista < referencia e ainda não devolvidos) o estudante possui
 async function contarEmprestimosAtrasadosDoEstudante(
   estudanteId,
   referencia = new Date(),
@@ -120,19 +124,19 @@ async function contarEmprestimosAtrasadosDoEstudante(
   const where = {
     estudante_id: estudanteId,
     data_devolucao_realizada: null,
-    data_devolucao_prevista: { [Op.lt]: referencia }, // Op.lt: menor que (data prevista já passou)
+    data_devolucao_prevista: { [Op.lt]: referencia }, // Op.lt = "less than" (menor que a data atual)
   };
-  if (excluirEmprestimoId) where.id = { [Op.ne]: excluirEmprestimoId };
+  if (excluirEmprestimoId) where.id = { [Op.ne]: excluirEmprestimoId }; // Op.ne = ignora um empréstimo específico (usado na devolução)
 
   return Emprestimo.count({ where, transaction });
 }
 
-// Insere um novo empréstimo no banco
+// Insere um novo empréstimo no PostgreSQL (recebe transaction para atomicidade)
 async function criarEmprestimo(dados, transaction) {
   return Emprestimo.create(dados, { transaction });
 }
 
-// Atualiza um empréstimo existente
+// Atualiza um empréstimo já carregado do banco
 async function atualizarEmprestimo(emprestimo, dados, transaction) {
   return emprestimo.update(dados, { transaction });
 }
@@ -147,7 +151,7 @@ async function atualizarEstudante(estudante, dados, transaction) {
   return estudante.update(dados, { transaction });
 }
 
-// Remove um empréstimo e suas justificativas vinculadas
+// Remove primeiro as justificativas filhas e depois o empréstimo para não violar chave estrangeira
 async function excluirEmprestimo(emprestimoId, transaction) {
   await Justificativa.destroy({ where: { emprestimo_id: emprestimoId }, transaction });
   return Emprestimo.destroy({ where: { id: emprestimoId }, transaction });
@@ -160,7 +164,7 @@ async function criarJustificativa(dados, transaction) {
   return Justificativa.create(dados, { transaction });
 }
 
-// Lista todas as justificativas enviadas pelos estudantes, trazendo os dados do aluno e do livro
+// Lista todas as justificativas enviadas pelos estudantes, trazendo aluno, empréstimo, exemplar e livro
 async function listarJustificativas() {
   return Justificativa.findAll({
     include: [
@@ -191,7 +195,8 @@ async function atualizarJustificativa(justificativa, dados) {
   return justificativa.update(dados);
 }
 
-// Marca automaticamente empréstimos vencidos como 'atrasado' e bloqueia os estudantes em atraso
+// [RESUMO 3 & RELATÓRIO 2.1c] Varre o banco procurando empréstimos vencidos (sem devolução e data_prevista < hoje),
+// marca esses empréstimos como 'atrasado' e bloqueia automaticamente os estudantes ativos que estão em atraso
 async function sincronizarAtrasos({ estudanteId = null, referencia = new Date() } = {}) {
   const whereVencidos = {
     data_devolucao_realizada: null,
@@ -203,7 +208,7 @@ async function sincronizarAtrasos({ estudanteId = null, referencia = new Date() 
   if (vencidos.length === 0) return { emprestimosMarcadosAtrasados: 0, estudantesBloqueados: 0 };
 
   const idsEmprestimos = vencidos.map((e) => e.id);
-  const idsEstudantes = [...new Set(vencidos.map((e) => e.estudante_id))];
+  const idsEstudantes = [...new Set(vencidos.map((e) => e.estudante_id))]; // Set remove IDs repetidos
 
   await Emprestimo.update({ status: 'atrasado' }, { where: { id: { [Op.in]: idsEmprestimos } } });
   const [estudantesBloqueados] = await Estudante.update(
@@ -217,7 +222,8 @@ async function sincronizarAtrasos({ estudanteId = null, referencia = new Date() 
   };
 }
 
-// Abre uma transação no banco (rollback automático se der erro)
+// [RESUMO 2 & RELATÓRIO 3.4] Abre uma transação no banco via Sequelize:
+// se tudo dentro do callback rodar sem erro, faz COMMIT; se qualquer linha lançar erro, faz ROLLBACK automático!
 async function executarTransacao(callback) {
   return sequelize.transaction(callback);
 }

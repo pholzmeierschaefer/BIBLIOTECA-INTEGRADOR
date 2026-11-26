@@ -1,18 +1,21 @@
-// emprestimos.controller.js – Recebe as requisições HTTP de Empréstimos e Justificativas, valida dados básicos e chama o Service
+// emprestimos.controller.js – Camada Controller de Empréstimos e Justificativas
+// [RESUMO 1 - Controller | RELATÓRIO 2.1b & 4.2.3]
+// Por que está aqui: recebe req/res do Express, faz apenas a checagem básica de campos obrigatórios,
+// delega toda regra de negócio ao Service e devolve o status HTTP adequado (200, 201, 204, 400).
 
 const emprestimosService = require('./emprestimos.service');
 
-// GET /api/emprestimos – Lista todos os empréstimos com filtros opcionais via query params
+// GET /api/emprestimos – Lista todos os empréstimos com filtros opcionais via query params (?status=, ?matricula=)
 async function listarEmprestimos(req, res, next) {
   try {
     const emprestimos = await emprestimosService.listarEmprestimos(req.query);
     return res.status(200).json(emprestimos);
   } catch (err) {
-    return next(err);
+    return next(err); // Repassa qualquer erro para o middleware global erroHandler.js
   }
 }
 
-// GET /api/emprestimos/:id – Busca um empréstimo específico pelo ID
+// GET /api/emprestimos/:id – Busca um empréstimo específico pelo ID da URL
 async function buscarEmprestimoPorId(req, res, next) {
   try {
     const emprestimo = await emprestimosService.buscarEmprestimoPorId(Number(req.params.id));
@@ -22,13 +25,15 @@ async function buscarEmprestimoPorId(req, res, next) {
   }
 }
 
-// POST /api/emprestimos – Registra um novo empréstimo informando a matrícula do aluno e o tombo do exemplar
+// POST /api/emprestimos – [RESUMO 1] Fluxo de criação de empréstimo no balcão
+// Valida se matrícula e tombo foram informados e delega as regras pesadas ao emprestimos.service.js
 async function registrarEmprestimo(req, res, next) {
   try {
     const estudante_matricula = req.body.estudante_matricula ?? req.body.matricula;
     const exemplar_tombo =
       req.body.exemplar_tombo ?? req.body.codigo_tombo ?? req.body.codigo_exemplar;
 
+    // Validação básica de entrada no Controller [RELATÓRIO 4.2.3]
     if (!estudante_matricula?.trim() || !exemplar_tombo?.trim()) {
       return res.status(400).json({
         erro: 'A matrícula do estudante e o código de tombo do exemplar são obrigatórios.',
@@ -40,7 +45,7 @@ async function registrarEmprestimo(req, res, next) {
       exemplar_tombo,
     });
 
-    return res.status(201).json(emprestimo);
+    return res.status(201).json(emprestimo); // 201 Created: registro criado no banco
   } catch (err) {
     return next(err);
   }
@@ -53,6 +58,7 @@ async function registrarDevolucao(req, res, next) {
     const bodyTombo =
       req.body?.exemplar_tombo ?? req.body?.codigo_tombo ?? req.body?.codigo_exemplar;
 
+    // Aceita tanto devolver pelo ID numérico na URL quanto pelo código de tombo no parâmetro ou no body
     const emprestimoId =
       paramId && /^\d+$/.test(paramId) ? Number(paramId) : Number(req.body?.emprestimo_id) || null;
     const exemplarTombo =
@@ -81,7 +87,7 @@ async function registrarRenovacao(req, res, next) {
   }
 }
 
-// GET /api/emprestimos/dashboard – Retorna indicadores consolidados de empréstimos ativos e atrasos
+// GET /api/emprestimos/dashboard – Retorna indicadores consolidados para o Dashboard do bibliotecário
 async function obterDashboard(req, res, next) {
   try {
     const dashboard = await emprestimosService.obterDashboard();
@@ -91,11 +97,11 @@ async function obterDashboard(req, res, next) {
   }
 }
 
-// GET /api/emprestimos/meus – Lista os empréstimos em posse e o histórico de um estudante
+// GET /api/emprestimos/meus – Lista os empréstimos em posse e histórico do aluno logado
 async function listarMeusEmprestimos(req, res, next) {
   try {
     const resultado = await emprestimosService.listarMeusEmprestimos(
-      req.usuario,
+      req.usuario, // Preenchido pelo middleware autenticar.js a partir do token JWT
       req.query.matricula
     );
     return res.status(200).json(resultado);
@@ -114,7 +120,7 @@ async function editarEmprestimo(req, res, next) {
   }
 }
 
-// DELETE /api/emprestimos/:id – Exclui um empréstimo e libera o exemplar físico
+// DELETE /api/emprestimos/:id – Exclui um empréstimo e devolve 204 No Content (sem corpo)
 async function excluirEmprestimo(req, res, next) {
   try {
     await emprestimosService.excluirEmprestimo(Number(req.params.id));
@@ -126,7 +132,7 @@ async function excluirEmprestimo(req, res, next) {
 
 // --- Justificativas de Atraso ---
 
-// PUT /api/emprestimos/:id/justificativa – Envia uma justificativa de atraso para o empréstimo
+// PUT /api/emprestimos/:id/justificativa – Recebe o texto do aluno explicando o atraso
 async function enviarJustificativaAtraso(req, res, next) {
   try {
     const texto =

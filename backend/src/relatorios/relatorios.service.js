@@ -1,9 +1,13 @@
-// relatorios.service.js – Regras de negócio e cálculos dos Relatórios Gerenciais (Livros mais lidos, Turmas e Atrasos)
+// relatorios.service.js – Regras de negócio e cálculos dos Relatórios Gerenciais
+// [RESUMO 3 - Relatórios]
+// Em vez de montar queries SQL gigantes com vários GROUP BY e agregações complexas,
+// buscamos os registros puros no repository e usamos estruturas nativas do JavaScript (new Map() e new Set())
+// na memória do Node.js para agrupar rankings, frequência por turma e taxas de atraso, além de gerar os CSVs.
 
 const relatoriosRepository = require('./relatorios.repository');
 
 const MS_POR_DIA = 1000 * 60 * 60 * 24;
-const LIMITE_CRITICO_DIAS = 10;
+const LIMITE_CRITICO_DIAS = 10; // Atrasos acima de 10 dias entram na coluna de "Atrasos Críticos"
 
 // Cria um erro padronizado com statusCode HTTP (400)
 function criarErroHttp(statusCode, mensagem) {
@@ -12,7 +16,7 @@ function criarErroHttp(statusCode, mensagem) {
   return err;
 }
 
-// Valida e normaliza os filtros opcionais de mês (1 a 12) e ano
+// Valida e normaliza os filtros opcionais de mês (1 a 12) e ano na query string (?mes=&ano=)
 function validarPeriodo({ mes, ano } = {}) {
   const mesNum = mes ? Number(mes) : null;
   let anoNum = ano ? Number(ano) : null;
@@ -23,19 +27,21 @@ function validarPeriodo({ mes, ano } = {}) {
   if (anoNum && (anoNum < 2000 || anoNum > 2100)) {
     throw criarErroHttp(400, 'O ano informado é inválido.');
   }
-  if (mesNum && !anoNum) anoNum = new Date().getFullYear();
+  if (mesNum && !anoNum) anoNum = new Date().getFullYear(); // Se passou só o mês, assume o ano atual
 
   return { mes: mesNum, ano: anoNum };
 }
 
-// Converte uma matriz de cabeçalhos e linhas em texto CSV separado por ';' (compatível com Excel em PT-BR)
+// Converte cabeçalhos e linhas em string CSV separada por ';' (padrão do Excel em português)
+// O prefixo '\uFEFF' (BOM UTF-8) garante que acentos (ã, ç, é) abram corretos direto no Excel
 function gerarCsv(cabecalhos, linhas) {
   const formatarLinha = (cols) =>
     cols.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';');
   return `\uFEFF${[formatarLinha(cabecalhos), ...linhas.map(formatarLinha)].join('\r\n')}\r\n`;
 }
 
-// 1. Relatório de Livros Mais Lidos no período
+// 1. RELATÓRIO DE LIVROS MAIS LIDOS no período
+// [RESUMO 3] Usa new Map() agrupando pelo ID do livro para contar quantas vezes cada título foi emprestado
 async function gerarRelatorioLivrosMaisLidos({ mes, ano, limite } = {}) {
   const periodo = validarPeriodo({ mes, ano });
   const limiteNum = limite ? Number(limite) : 20;
@@ -62,7 +68,7 @@ async function gerarRelatorioLivrosMaisLidos({ mes, ano, limite } = {}) {
     contagemPorLivro.get(livro.id).total_emprestimos += 1;
   }
 
-  // Ordena do livro mais emprestado para o menos emprestado
+  // Converte o Map em array, ordena do mais emprestado para o menos emprestado e enumera as posições (1º, 2º...)
   const ranking = Array.from(contagemPorLivro.values())
     .sort((a, b) => b.total_emprestimos - a.total_emprestimos)
     .slice(0, limiteNum)
@@ -92,7 +98,8 @@ function formatarLivrosMaisLidosCsv(relatorio) {
   return gerarCsv(cabecalhos, linhas);
 }
 
-// 2. Relatório de Frequência de Leitura por Turma
+// 2. RELATÓRIO DE FREQUÊNCIA DE LEITURA POR TURMA
+// [RESUMO 3] Usa new Map() para agrupar por turma e new Set() para contar quantos alunos DIFERENTES (leitores únicos) pegaram livros
 async function gerarRelatorioFrequenciaTurmas({ mes, ano } = {}) {
   const periodo = validarPeriodo({ mes, ano });
   const [emprestimos, estudantes] = await Promise.all([
@@ -102,7 +109,7 @@ async function gerarRelatorioFrequenciaTurmas({ mes, ano } = {}) {
 
   const mapaTurmas = new Map();
 
-  // Inicializa todas as turmas cadastradas
+  // Primeiro percorre os estudantes para listar todas as turmas e saber quantos alunos há em cada uma
   for (const est of estudantes) {
     const turma = est.turma || 'Sem Turma';
     if (!mapaTurmas.has(turma)) {
@@ -111,7 +118,7 @@ async function gerarRelatorioFrequenciaTurmas({ mes, ano } = {}) {
     mapaTurmas.get(turma).total_estudantes_turma += 1;
   }
 
-  // Soma os empréstimos e leitores únicos de cada turma
+  // Depois soma os empréstimos da turma e adiciona o ID do aluno no Set (Set ignora IDs repetidos automaticamente)
   for (const emp of emprestimos) {
     const turma = emp.estudante?.turma || 'Sem Turma';
     if (!mapaTurmas.has(turma)) {
@@ -156,7 +163,7 @@ function formatarFrequenciaTurmasCsv(relatorio) {
   return gerarCsv(cabecalhos, linhas);
 }
 
-// 3. Relatório de Taxas de Atraso (geral e agrupado por turma)
+// 3. RELATÓRIO DE TAXAS DE ATRASO (geral e agrupado por turma via Map)
 async function gerarRelatorioTaxasAtraso({ mes, ano, turma } = {}) {
   const periodo = validarPeriodo({ mes, ano });
   const agora = new Date();
@@ -181,7 +188,7 @@ async function gerarRelatorioTaxasAtraso({ mes, ano, turma } = {}) {
     const grupo = mapaTurmas.get(turmaNome);
     grupo.total_emprestimos += 1;
 
-    // Compara a data em que foi devolvido (ou a data atual, se ainda não devolveu) com a data prevista
+    // Se já devolveu, compara a data de devolução com a prevista; se ainda não devolveu, compara com hoje (agora)
     const dataReferencia = emp.data_devolucao_realizada ? new Date(emp.data_devolucao_realizada) : agora;
     const diffMs = dataReferencia.getTime() - new Date(emp.data_devolucao_prevista).getTime();
 

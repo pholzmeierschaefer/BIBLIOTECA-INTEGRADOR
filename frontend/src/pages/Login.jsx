@@ -1,16 +1,25 @@
-// Login.jsx – Tela simples de login para Estudante e Administrador
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 2.3b & 3.2] TELA DE AUTENTICAÇÃO (ESTUDANTE E ADMIN)
+// O QUE FAZ: Recebe matrícula/e-mail e senha, envia para POST /auth/login e
+// salva o token JWT retornado no navegador antes de avisar o componente App.
+// POR QUE ESTÁ AQUI: Separa o login por perfil (estudante/administrador) e
+// valida credenciais via API sem manter sessão no servidor (Stateless JWT).
+// =============================================================================
 
 import { useState } from 'react';
 import { Alert, Box, Button, Paper, TextField, Typography } from '@mui/material';
 import { apiRequest, setToken } from '../services/api';
 
 export default function Login({ onLogin }) {
+  // [RESUMO 4] useState controla a aba selecionada, os inputs controlados e mensagens de erro
   const [perfil, setPerfil] = useState('estudante'); // Aba selecionada ('estudante' ou 'administrador')
   const [matricula, setMatricula] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
 
-  // Envia as credenciais para a API, salva o token JWT retornado e atualiza o usuário no App
+  // Envia credenciais para a API:
+  // - e.preventDefault() evita reload da página ao submeter o <form>.
+  // - Salva o JWT via setToken() e passa os dados do usuário para App.jsx exibir o painel correto.
   async function handleEntrar(e) {
     e.preventDefault();
     setErro('');

@@ -1,4 +1,10 @@
-// main.jsx – Ponto de entrada do React com as cores do tema da Biblioteca HM
+// =============================================================================
+// [RELATÓRIO 4.2 - TEMA E CONTRASTE] PONTO DE ENTRADA DO FRONTEND REACT
+// O QUE FAZ: Inicializa a árvore React no elemento #root e aplica o tema global
+// do Material UI (paleta pêssego/marrom escuro e override de botões).
+// POR QUE ESTÁ AQUI: Resolve problemas visuais de contraste em botões outlined/text
+// sobre o fundo claro, centralizando o estilo visual da Biblioteca HM.
+// =============================================================================
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

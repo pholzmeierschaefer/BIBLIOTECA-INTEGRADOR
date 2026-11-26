@@ -1,4 +1,9 @@
-// DashAdmin.jsx – Painel principal do Bibliotecário com menu de navegação simples
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 2.3b] PAINEL PRINCIPAL DO ADMINISTRADOR / BIBLIOTECÁRIO
+// O QUE FAZ: Renderiza a barra de abas (Dashboard, Estudantes, Acervo, Empréstimos,
+// Reservas, Justificativas) e os alertas globais de sucesso/erro recebidos dos filhos.
+// POR QUE ESTÁ AQUI: Permite alternar rapidamente entre módulos sem recarregar a página.
+// =============================================================================
 
 import { useState } from 'react';
 import { Alert, Box, Button, Typography } from '@mui/material';

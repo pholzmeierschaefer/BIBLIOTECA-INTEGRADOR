@@ -1,4 +1,10 @@
-// PortalAluno.jsx – Tela do estudante para consultar seus empréstimos, pesquisar livros e fazer reservas
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 1, 2.3b & 3.2] PORTAL DO ESTUDANTE (PERFIL RESTRITO)
+// O QUE FAZ: Permite ao aluno autenticado ver seus empréstimos/histórico,
+// pesquisar no acervo, criar/cancelar reservas, justificar atrasos e mudar senha.
+// POR QUE ESTÁ AQUI: Separa no frontend a visão limitada do estudante (autorização
+// garantida no backend por autorizar.js + token JWT).
+// =============================================================================
 
 import { useEffect, useState } from 'react';
 import {

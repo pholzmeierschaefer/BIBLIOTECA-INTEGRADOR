@@ -1,20 +1,23 @@
-// emprestimos.service.js – Regras de negócio de Empréstimos, Devoluções, Renovações, Justificativas e Dashboard
+// emprestimos.service.js – Camada Service (Cérebro e Regras de Negócio) de Empréstimos, Devoluções, Renovações, Justificativas e Dashboard
+// [RESUMO 1 - Service | RESUMO 2 - Transações | RESUMO 3 - Regras de Negócio Críticas | RELATÓRIO 2.1c & 4.2.3]
 
 const emprestimosRepository = require('./emprestimos.repository');
 
+// [RESUMO 3] Constantes de regras da biblioteca definidas no topo para facilitar leitura e manutenção
 const PRAZO_PADRAO_DIAS = 7; // Prazo padrão de 7 dias corridos por empréstimo ou renovação
 const LIMITE_EMPRESTIMOS_SIMULTANEOS = 2; // Máximo de 2 livros emprestados por aluno ao mesmo tempo
 const LIMITE_ATRASO_CRITICO_DIAS = 10; // Atrasos acima de 10 dias recebem alerta crítico no dashboard
-const MS_POR_DIA = 1000 * 60 * 60 * 24;
+const MS_POR_DIA = 1000 * 60 * 60 * 24; // Quantidade de milissegundos em 1 dia (usado no cálculo de atraso)
 
-// Cria um erro padronizado com statusCode HTTP (400, 403, 404, 409)
+// [RELATÓRIO 4.2.3] Função auxiliar para criar erros de negócio com código HTTP (400, 403, 404, 409)
+// O erroHandler.js lê err.statusCode para responder o status HTTP certo sem expor detalhes internos
 function criarErroHttp(statusCode, mensagem) {
   const err = new Error(mensagem);
   err.statusCode = statusCode;
   return err;
 }
 
-// Soma uma quantidade de dias a uma data
+// Soma uma quantidade de dias a uma data (usado para calcular +7 dias no empréstimo e na renovação)
 function adicionarDias(dataBase, dias) {
   const novaData = new Date(dataBase);
   novaData.setDate(novaData.getDate() + dias);
@@ -27,7 +30,7 @@ function calcularDiasAtraso(dataPrevista, referencia = new Date()) {
   return diffMs > 0 ? Math.max(1, Math.floor(diffMs / MS_POR_DIA)) : 0;
 }
 
-// Formata os dados do empréstimo para resposta JSON (incluindo estudante, exemplar, livro e justificativas)
+// Padroniza o objeto JSON que vai para o frontend (já calcula status em tempo real, dias_atraso e critico)
 function formatarEmprestimo(emprestimo, referencia = new Date()) {
   const emAberto = emprestimo.data_devolucao_realizada === null;
   const diasAtraso = emAberto ? calcularDiasAtraso(emprestimo.data_devolucao_prevista, referencia) : 0;
@@ -79,26 +82,29 @@ function formatarEmprestimo(emprestimo, referencia = new Date()) {
   };
 }
 
-// 1. Registra um novo empréstimo validando a situação do aluno e do exemplar físico
+// 1. REGISTRAR EMPRÉSTIMO
+// [RESUMO 1 - Fluxo | RESUMO 2 - Transação | RESUMO 3 - Regras de Negócio | RELATÓRIO 3.4 & 4.2.3]
 async function registrarEmprestimo({ estudante_matricula, exemplar_tombo }) {
   const agora = new Date();
   const estudante = await emprestimosRepository.buscarEstudantePorMatricula(estudante_matricula);
   if (!estudante) throw criarErroHttp(404, 'Estudante não encontrado.');
 
-  // Atualiza possíveis atrasos do aluno antes de validar
+  // [RESUMO 3] Varre o banco antes de emprestar: se houver livro vencido, marca como 'atrasado' e bloqueia o aluno
   await emprestimosRepository.sincronizarAtrasos({ estudanteId: estudante.id, referencia: agora });
-  await estudante.reload();
+  await estudante.reload(); // Recarrega do banco caso sincronizarAtrasos tenha mudado o status para 'bloqueado'
 
+  // Regra: aluno 'bloqueado' ou 'inativo' não pode pegar novos livros
   if (estudante.status !== 'ativo') {
     throw criarErroHttp(409, `Empréstimo bloqueado: o estudante está com status "${estudante.status}".`);
   }
 
-  // Verifica se o estudante já atingiu o limite de 2 livros emprestados simultaneamente
+  // [RESUMO 3] Limite de 2 empréstimos simultâneos: conta registros onde data_devolucao_realizada é null
   const ativos = await emprestimosRepository.contarEmprestimosAtivosDoEstudante(estudante.id);
   if (ativos >= LIMITE_EMPRESTIMOS_SIMULTANEOS) {
     throw criarErroHttp(409, `Limite atingido: o estudante já possui ${LIMITE_EMPRESTIMOS_SIMULTANEOS} livros emprestados.`);
   }
 
+  // Busca o exemplar físico pelo tombo e confere se está livre na estante
   const exemplar = await emprestimosRepository.buscarExemplarPorTombo(exemplar_tombo);
   if (!exemplar) throw criarErroHttp(404, 'Exemplar não encontrado.');
 
@@ -106,21 +112,24 @@ async function registrarEmprestimo({ estudante_matricula, exemplar_tombo }) {
     throw criarErroHttp(409, `Este exemplar não está disponível (status atual: "${exemplar.status}").`);
   }
 
-  // Grava o empréstimo (+7 dias) e muda o status do exemplar para 'emprestado' na mesma transação
+  // [RESUMO 2 & RELATÓRIO 3.4] CONTROLE DE TRANSAÇÃO (Atomicidade):
+  // Aqui mexemos em DUAS tabelas ao mesmo tempo: 'emprestimos' (INSERT) e 'exemplares' (UPDATE).
+  // Se o servidor cair ou der erro entre as duas gravações, a transação faz ROLLBACK automático de tudo!
   const emprestimoCriado = await emprestimosRepository.executarTransacao(async (transaction) => {
     const novo = await emprestimosRepository.criarEmprestimo(
       {
         exemplar_id: exemplar.id,
         estudante_id: estudante.id,
         data_emprestimo: agora,
-        data_devolucao_prevista: adicionarDias(agora, PRAZO_PADRAO_DIAS),
-        data_devolucao_realizada: null,
+        data_devolucao_prevista: adicionarDias(agora, PRAZO_PADRAO_DIAS), // Prazo = hoje + 7 dias
+        data_devolucao_realizada: null, // Null indica que o livro ainda está com o aluno
         renovacoes: 0,
         status: 'ativo',
       },
       transaction
     );
 
+    // Muda o exemplar físico para 'emprestado' dentro da mesma transação
     await emprestimosRepository.atualizarExemplar(exemplar, { status: 'emprestado' }, transaction);
     return emprestimosRepository.buscarEmprestimoPorId(novo.id, transaction);
   });
@@ -128,7 +137,8 @@ async function registrarEmprestimo({ estudante_matricula, exemplar_tombo }) {
   return formatarEmprestimo(emprestimoCriado, agora);
 }
 
-// 2. Registra a devolução do livro (pelo ID do empréstimo ou código de tombo do exemplar)
+// 2. REGISTRAR DEVOLUÇÃO (aceita ID do empréstimo ou código de tombo do exemplar)
+// [RESUMO 2 - Transação] Atualiza 3 tabelas na mesma transação: 'emprestimos', 'exemplares' e (se preciso) 'estudantes'
 async function registrarDevolucao({ emprestimoId, exemplarTombo }) {
   const agora = new Date();
 
@@ -142,15 +152,16 @@ async function registrarDevolucao({ emprestimoId, exemplarTombo }) {
       throw criarErroHttp(409, 'Este empréstimo já foi devolvido.');
     }
 
-    // Dá baixa no empréstimo e libera o exemplar de volta para 'disponivel'
+    // 1) Registra a data real da devolução e muda status do empréstimo para 'devolvido'
     await emprestimosRepository.atualizarEmprestimo(
       emprestimo,
       { data_devolucao_realizada: agora, status: 'devolvido' },
       transaction
     );
+    // 2) Libera a cópia física na estante de volta para 'disponivel'
     await emprestimosRepository.atualizarExemplar(emprestimo.exemplar, { status: 'disponivel' }, transaction);
 
-    // Se o estudante estava bloqueado por atraso e não tem mais nenhum outro livro atrasado, desbloqueia automaticamente
+    // 3) Desbloqueio automático: se o aluno estava bloqueado por atraso e não tem nenhum outro livro atrasado, volta para 'ativo'
     let estudanteDesbloqueado = false;
     if (emprestimo.estudante?.status === 'bloqueado') {
       const outrosAtrasos = await emprestimosRepository.contarEmprestimosAtrasadosDoEstudante(
@@ -176,7 +187,8 @@ async function registrarDevolucao({ emprestimoId, exemplarTombo }) {
   };
 }
 
-// 3. Renova um empréstimo em aberto por mais 7 dias corridos
+// 3. REGISTRAR RENOVAÇÃO (+7 dias corridos sobre a data prevista atual)
+// Só permite renovar se o livro ainda não foi devolvido, não está atrasado e o aluno está 'ativo'
 async function registrarRenovacao(emprestimoId) {
   const agora = new Date();
   const emprestimo = await emprestimosRepository.buscarEmprestimoPorId(emprestimoId);
@@ -203,7 +215,7 @@ async function registrarRenovacao(emprestimoId) {
   return formatarEmprestimo(emprestimo, agora);
 }
 
-// 4. Lista todos os empréstimos aplicando filtros opcionais
+// 4. LISTAR EMPRÉSTIMOS (com sincronização automática de atrasos antes de devolver a lista)
 async function listarEmprestimos(filtros = {}) {
   const agora = new Date();
   await emprestimosRepository.sincronizarAtrasos({ referencia: agora });
@@ -218,7 +230,8 @@ async function listarEmprestimos(filtros = {}) {
   return emprestimos.map((emp) => formatarEmprestimo(emp, agora));
 }
 
-// 5. Retorna os indicadores consolidados do Dashboard da biblioteca (empréstimos ativos e atrasos)
+// 5. DASHBOARD GERENCIAL (usado por Dashboard.jsx no frontend)
+// Sincroniza atrasos e devolve totais em tempo real de ativos, atrasados e atrasos críticos (> 10 dias)
 async function obterDashboard() {
   const agora = new Date();
   await emprestimosRepository.sincronizarAtrasos({ referencia: agora });
@@ -241,7 +254,7 @@ async function obterDashboard() {
   };
 }
 
-// 6. Consulta os empréstimos de um estudante específico (portal do aluno)
+// 6. PORTAL DO ALUNO: separa o que o estudante tem em mãos ('em_posse') do que já devolveu ('historico')
 async function listarMeusEmprestimos(usuarioAutenticado, matriculaFiltro = null) {
   let estudante = null;
 
@@ -271,14 +284,14 @@ async function listarMeusEmprestimos(usuarioAutenticado, matriculaFiltro = null)
   };
 }
 
-// 7. Busca detalhes de um empréstimo pelo ID
+// 7. BUSCAR POR ID
 async function buscarEmprestimoPorId(emprestimoId) {
   const emprestimo = await emprestimosRepository.buscarEmprestimoPorId(emprestimoId);
   if (!emprestimo) throw criarErroHttp(404, 'Empréstimo não encontrado.');
   return formatarEmprestimo(emprestimo);
 }
 
-// 8. Edita dados administrativos de um empréstimo (data prevista, devolução, renovações ou status)
+// 8. EDITAR EMPRÉSTIMO (permite ajustes administrativos em datas, renovações ou status)
 async function editarEmprestimo(emprestimoId, dados) {
   const emprestimo = await emprestimosRepository.buscarEmprestimoPorId(emprestimoId);
   if (!emprestimo) throw criarErroHttp(404, 'Empréstimo não encontrado.');
@@ -299,7 +312,7 @@ async function editarEmprestimo(emprestimoId, dados) {
   return formatarEmprestimo(atualizado);
 }
 
-// 9. Exclui um empréstimo por ID (se ainda estava aberto, devolve o exemplar para 'disponivel')
+// 9. EXCLUIR EMPRÉSTIMO (dentro de transação: se ainda estava aberto, volta o exemplar para 'disponivel')
 async function excluirEmprestimo(emprestimoId) {
   await emprestimosRepository.executarTransacao(async (transaction) => {
     const emprestimo = await emprestimosRepository.buscarEmprestimoPorId(emprestimoId, transaction);
@@ -319,7 +332,7 @@ async function excluirEmprestimo(emprestimoId) {
 
 // --- Regras de Negócio: Justificativas de Atraso ---
 
-// 10. Registra uma justificativa de atraso enviada pelo estudante para um empréstimo
+// 10. Registra justificativa enviada pelo aluno no Portal do Aluno (exige no mínimo 5 caracteres)
 async function enviarJustificativaAtraso(emprestimoId, textoJustificativa) {
   const textoLimpo = String(textoJustificativa || '').trim();
   if (textoLimpo.length < 5) {
@@ -345,7 +358,7 @@ async function enviarJustificativaAtraso(emprestimoId, textoJustificativa) {
   };
 }
 
-// 11. Lista todas as justificativas de atraso enviadas pelos estudantes
+// 11. Lista todas as justificativas enviadas pelos alunos para a tela Mensagens.jsx do bibliotecário
 async function listarJustificativas() {
   const lista = await emprestimosRepository.listarJustificativas();
   return lista.map((item) => {
@@ -375,7 +388,7 @@ async function listarJustificativas() {
   });
 }
 
-// 12. Marca uma justificativa de atraso como 'analisada' pelo bibliotecário
+// 12. Marca uma justificativa pendente como 'analisada' pelo bibliotecário
 async function marcarJustificativaAnalisada(justificativaId) {
   const justificativa = await emprestimosRepository.buscarJustificativaPorId(justificativaId);
   if (!justificativa) throw criarErroHttp(404, 'Justificativa não encontrada.');

@@ -4,12 +4,19 @@ import { useEffect, useState } from 'react';
 import { Box, Button, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { apiRequest, baixarCsv, formatarData } from '../services/api';
 
+// =============================================================================
+// [RESUMO 3 & 4 | RELATÓRIO 1 & 4.2.2] PAINEL ANALÍTICO (DASHBOARD + CSV)
+// O QUE FAZ: Exibe contadores gerais da biblioteca, lista de empréstimos em
+// atraso e botões para baixar relatórios CSV (acervo, empréstimos e alunos).
+// POR QUE ESTÁ AQUI: Dá visão rápida ao bibliotecário carregando indicadores em paralelo.
+// =============================================================================
 export default function Dashboard({ onErro, onSucesso }) {
+  // [RESUMO 4] useState armazena os dados do dashboard e totais de alunos/livros para renderização reativa
   const [dashboard, setDashboard] = useState(null);
   const [totalAlunos, setTotalAlunos] = useState(0);
   const [totalLivros, setTotalLivros] = useState(0);
 
-  // Busca em paralelo os indicadores do dashboard, total de alunos e total de livros
+  // Busca em paralelo (/dashboard, /estudantes e /livros) com Promise.all para reduzir tempo de espera
   async function carregar() {
     try {
       const [dash, alunos, livros] = await Promise.all([
@@ -25,6 +32,7 @@ export default function Dashboard({ onErro, onSucesso }) {
     }
   }
 
+  // [RESUMO 4 | RELATÓRIO 4.2.2] Carrega os indicadores uma única vez ao abrir a tela inicial do painel
   useEffect(() => {
     carregar();
   }, []);

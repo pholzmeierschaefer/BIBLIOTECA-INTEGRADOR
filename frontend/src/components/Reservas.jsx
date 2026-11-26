@@ -1,4 +1,9 @@
-// Reservas.jsx – Fila de espera de reservas de livros
+// =============================================================================
+// [RESUMO 3 & 4 | RELATÓRIO 3.5 & 4.2.2] TELA DE FILA DE RESERVAS (ADMIN)
+// O QUE FAZ: Exibe a fila de espera FIFO de reservas e permite registrar novas
+// reservas por formulário em linha, cancelar pendentes ou excluir registros.
+// POR QUE ESTÁ AQUI: Consome reservas.service.js mantendo a interface direta.
+// =============================================================================
 
 import { useEffect, useState } from 'react';
 import {
@@ -16,11 +21,12 @@ import {
 import { apiRequest } from '../services/api';
 
 export default function Reservas({ onErro, onSucesso }) {
+  // [RESUMO 4] Estados React da tabela e dos campos do formulário em linha
   const [lista, setLista] = useState([]);
   const [matricula, setMatricula] = useState('');
   const [codigoLivro, setCodigoLivro] = useState('');
 
-  // Carrega a fila de reservas ordenada por chegada
+  // Carrega a fila de reservas (GET /api/reservas) ordenada por ordem de chegada (FIFO)
   async function carregar() {
     try {
       setLista(await apiRequest('/api/reservas'));
@@ -29,11 +35,12 @@ export default function Reservas({ onErro, onSucesso }) {
     }
   }
 
+  // [RESUMO 4 | RELATÓRIO 4.2.2] Dispara a busca inicial assim que a aba Reservas é aberta
   useEffect(() => {
     carregar();
   }, []);
 
-  // Cria uma nova reserva vinculando a matrícula do aluno ao código do livro
+  // Registra uma nova reserva sem recarregar a página (e.preventDefault()) e atualiza a lista
   async function handleCriar(e) {
     e.preventDefault();
     try {

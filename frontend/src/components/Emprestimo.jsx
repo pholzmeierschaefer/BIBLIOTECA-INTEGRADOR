@@ -15,12 +15,21 @@ import {
 } from '@mui/material';
 import { apiRequest, formatarData } from '../services/api';
 
+// =============================================================================
+// [RESUMO 1 & 4 | RELATÓRIO 3.5 & 4.2.2] TELA DE GESTÃO DE EMPRÉSTIMOS (ADMIN)
+// O QUE FAZ: Lista todos os empréstimos e permite registrar empréstimo, devolver
+// ou renovar prazos diretamente na mesma tela usando formulário em linha.
+// POR QUE ESTÁ AQUI: Ilustra o fluxo completo do Resumo 1 (React -> apiRequest
+// -> Routes -> Middlewares -> Controller -> Service -> Repository) e estados React.
+// =============================================================================
 export default function Emprestimo({ onErro, onSucesso }) {
+  // [RESUMO 4] useState ("memória da tela"): guarda a lista vinda da API e os campos do formulário.
+  // Sempre que setLista é chamado após criar/devolver/renovar, o React redesenha a tabela sem F5.
   const [lista, setLista] = useState([]);
   const [matricula, setMatricula] = useState('');
   const [tombo, setTombo] = useState('');
 
-  // Carrega a lista de todos os empréstimos cadastrados
+  // Carrega todos os empréstimos da API (GET /api/emprestimos) e atualiza o estado da tabela
   async function carregar() {
     try {
       setLista(await apiRequest('/api/emprestimos'));
@@ -29,11 +38,15 @@ export default function Emprestimo({ onErro, onSucesso }) {
     }
   }
 
+  // [RESUMO 4 | RELATÓRIO 4.2.2] Gatilho inicial: roda carregar() uma única vez ao montar o componente
   useEffect(() => {
     carregar();
   }, []);
 
-  // Registra um novo empréstimo informando a matrícula do aluno e o tombo do exemplar
+  // [RESUMO 1] Fluxo de "Registrar Empréstimo":
+  // 1) e.preventDefault() impede o navegador de recarregar a página no submit HTML.
+  // 2) Envia POST /api/emprestimos via apiRequest (com token JWT) informando matrícula e tombo.
+  // 3) Limpa os inputs e chama carregar() para refletir o novo empréstimo na tabela.
   async function handleCriar(e) {
     e.preventDefault();
     try {

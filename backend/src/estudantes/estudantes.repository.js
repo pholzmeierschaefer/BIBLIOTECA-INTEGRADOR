@@ -67,7 +67,8 @@ async function atualizarEstudante(estudante, dados) {
   return estudante.update(dados);
 }
 
-// Exclui definitivamente o estudante (e registros vinculados, como conta de usuário/reservas/justificativas) do banco
+// [RELATÓRIO 4.2.2 - Dificuldade Foreign Keys] Exclui definitivamente o estudante dentro de uma transação:
+// remove primeiro os registros filhos (justificativas, reservas, empréstimos, usuário) para não violar chave estrangeira no PostgreSQL
 async function excluirEstudante(estudanteId) {
   return sequelize.transaction(async (transaction) => {
     if (db.Justificativa) {

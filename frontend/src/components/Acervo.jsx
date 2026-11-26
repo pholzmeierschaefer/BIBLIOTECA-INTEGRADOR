@@ -16,7 +16,15 @@ import {
 } from '@mui/material';
 import { apiRequest } from '../services/api';
 
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 3.1, 3.5 & 4.2.2] TELA DE GESTÃO DO ACERVO (LIVROS)
+// O QUE FAZ: Lista obras do acervo com busca/filtro/ordenação, formulário em
+// linha para cadastrar/editar títulos e botão rápido para adicionar exemplares.
+// POR QUE ESTÁ AQUI: Reflete no frontend a separação Livro x Exemplares (3.1)
+// e a simplificação de formulários em linha sem modais pesados (3.5 e 4.2.2).
+// =============================================================================
 export default function Acervo({ onErro, onSucesso }) {
+  // [RESUMO 4] Estados React que guardam a lista da API e os filtros ativos na tela
   const [livros, setLivros] = useState([]);
   const [busca, setBusca] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');

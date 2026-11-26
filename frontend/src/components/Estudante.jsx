@@ -20,7 +20,15 @@ import {
 } from '@mui/material';
 import { apiRequest } from '../services/api';
 
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 3.5, 4.2.1 & 4.2.2] TELA DE GESTÃO DE ESTUDANTES
+// O QUE FAZ: Lista estudantes com filtros e ordenação, oferece formulário em
+// linha para cadastrar/editar e importa planilhas reais do SISGESC (.xlsx/.csv).
+// POR QUE ESTÁ AQUI: Mostra os estados React (useState/useEffect), a interface
+// direta em linha (3.5) e a integração no navegador da importação SISGESC (4.2.1).
+// =============================================================================
 export default function Estudante({ onErro, onSucesso }) {
+  // [RESUMO 4] Estados React para a tabela e critérios de filtragem/ordenação
   const [lista, setLista] = useState([]);
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
@@ -98,7 +106,9 @@ export default function Estudante({ onErro, onSucesso }) {
     }
   }
 
-  // Lê o arquivo selecionado no computador (.xlsx em Base64 ou .csv/.txt como texto)
+  // [RELATÓRIO 4.2.1] Lê a planilha selecionada no computador:
+  // - Se for .xlsx (binário ZIP), converte para Base64 (readAsDataURL) para o backend descompactar com zlib.
+  // - Se for .csv/.txt, decodifica texto tentando UTF-8 e fazendo fallback para ISO-8859-1 (acentos do Excel/SISGESC).
   function handleSelecionarArquivo(e) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;

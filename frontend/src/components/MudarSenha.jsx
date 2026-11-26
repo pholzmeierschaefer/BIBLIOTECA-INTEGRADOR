@@ -1,4 +1,10 @@
-// MudarSenha.jsx – Modal simples para alteração de senha do usuário logado
+// =============================================================================
+// [RELATÓRIO 3.2 & 3.3] MODAL DE ALTERAÇÃO DE SENHA
+// O QUE FAZ: Envia senha atual e nova senha para PUT /auth/senha, permitindo que
+// o estudante substitua a senha inicial (matrícula) por uma senha pessoal.
+// POR QUE ESTÁ AQUI: Complementa a decisão 3.3 (senha inicial = matrícula),
+// dando autonomia ao aluno para proteger sua conta.
+// =============================================================================
 
 import { useState } from 'react';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField } from '@mui/material';

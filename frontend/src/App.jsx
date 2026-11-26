@@ -1,4 +1,10 @@
-// App.jsx – Verifica se o usuário está logado e direciona para Login, Painel Admin ou Portal do Aluno
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 2.3b & 4.2.2] COMPONENTE RAIZ E ROTEAMENTO POR PERFIL
+// O QUE FAZ: Verifica se há sessão ativa no carregamento inicial e decide qual
+// tela renderizar: Login, DashAdmin (bibliotecário) ou PortalAluno (estudante).
+// POR QUE ESTÁ AQUI: Mantém o controle de fluxo de acesso centralizado sem
+// precisar de rotas complexas antes da autenticação.
+// =============================================================================
 
 import { useEffect, useState } from 'react';
 import { apiRequest, getToken, setToken } from './services/api';
@@ -7,17 +13,19 @@ import DashAdmin from './pages/DashAdmin';
 import PortalAluno from './pages/PortalAluno';
 
 export default function App() {
+  // [RESUMO 4] useState guarda o usuário autenticado e o estado de carregamento inicial
   const [usuario, setUsuario] = useState(null);
   const [carregando, setCarregando] = useState(true);
 
-  // Ao abrir o site, verifica se já existe um token salvo na sessão
+  // [RESUMO 4 | RELATÓRIO 4.2.2] useEffect com array [] executa uma única vez ao abrir a página.
+  // Se houver token JWT no sessionStorage, valida-o em /auth/perfil para restaurar a sessão após F5.
   useEffect(() => {
     if (!getToken()) {
       setCarregando(false);
       return;
     }
 
-    // Busca os dados do usuário logado na API usando o token salvo
+    // Busca os dados do usuário logado na API usando o token salvo; se inválido/expirado, limpa o token.
     apiRequest('/auth/perfil')
       .then((perfil) => setUsuario(perfil))
       .catch(() => setToken(null))

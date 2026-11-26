@@ -1,30 +1,33 @@
-// emprestimos.routes.js – Definição das rotas HTTP protegidas para Empréstimos e Justificativas
+// emprestimos.routes.js – Camada de Rotas de Empréstimos e Justificativas
+// [RESUMO 1 - Routes & Middlewares | RELATÓRIO 2.1a]
+// Mapeia as URLs HTTP para as funções do Controller e aplica autenticação + controle de acesso por perfil.
 
 const express = require('express');
 const emprestimosController = require('./emprestimos.controller');
-const autenticar = require('../middlewares/autenticar'); // Exige token JWT válido
-const autorizar = require('../middlewares/autorizar'); // Restringe acesso por perfil (role)
+const autenticar = require('../middlewares/autenticar'); // Valida o token JWT em todas as rotas abaixo
+const autorizar = require('../middlewares/autorizar'); // Restringe rotas administrativas apenas ao 'bibliotecario'
 
 const router = express.Router();
 
-// Exige autenticação via token JWT em todas as rotas de empréstimos
+// Middleware aplicado em bloco: ninguém acessa nenhuma rota de empréstimo sem estar logado
 router.use(autenticar);
 
-// --- Rotas Fixas (registradas antes de /:id para evitar conflito de parâmetros na URL) ---
-router.get('/dashboard', autorizar('bibliotecario'), emprestimosController.obterDashboard); // Indicadores e atrasos
-router.get('/meus', emprestimosController.listarMeusEmprestimos); // Empréstimos do aluno logado ou por ?matricula=
-router.get('/justificativas', autorizar('bibliotecario'), emprestimosController.listarJustificativas); // Lista justificativas
-router.put('/justificativas/:id/analisar', autorizar('bibliotecario'), emprestimosController.marcarJustificativaAnalisada); // Marca justificativa analisada
-router.put('/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolução rápida via body
+// --- Rotas Fixas ---
+// IMPORTANTE: registradas ANTES de '/:id' para o Express não achar que "dashboard", "meus" ou "devolver" são um ID numérico!
+router.get('/dashboard', autorizar('bibliotecario'), emprestimosController.obterDashboard); // Indicadores gerenciais e atrasos
+router.get('/meus', emprestimosController.listarMeusEmprestimos); // Portal do Aluno: empréstimos do aluno logado
+router.get('/justificativas', autorizar('bibliotecario'), emprestimosController.listarJustificativas); // Caixa de justificativas
+router.put('/justificativas/:id/analisar', autorizar('bibliotecario'), emprestimosController.marcarJustificativaAnalisada); // Marca justificativa como lida
+router.put('/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolução rápida informando tombo no body
 
 // --- CRUD e Operações de Balcão (/api/emprestimos) ---
 router.get('/', autorizar('bibliotecario'), emprestimosController.listarEmprestimos); // Lista todos os empréstimos
-router.get('/:id', emprestimosController.buscarEmprestimoPorId); // Busca detalhes de um empréstimo pelo ID
-router.post('/', autorizar('bibliotecario'), emprestimosController.registrarEmprestimo); // Registra novo empréstimo
-router.put('/:id', autorizar('bibliotecario'), emprestimosController.editarEmprestimo); // Edita dados do empréstimo
+router.get('/:id', emprestimosController.buscarEmprestimoPorId); // Busca um empréstimo pelo ID
+router.post('/', autorizar('bibliotecario'), emprestimosController.registrarEmprestimo); // [RESUMO 1] Rota de criação de empréstimo (só bibliotecário)
+router.put('/:id', autorizar('bibliotecario'), emprestimosController.editarEmprestimo); // Edita dados administrativos
 router.delete('/:id', autorizar('bibliotecario'), emprestimosController.excluirEmprestimo); // Exclui empréstimo
-router.put('/:id/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolve pelo ID ou tombo
-router.put('/:id/renovar', autorizar('bibliotecario'), emprestimosController.registrarRenovacao); // Renova por +7 dias
-router.put('/:id/justificativa', emprestimosController.enviarJustificativaAtraso); // Envia justificativa de atraso
+router.put('/:id/devolver', autorizar('bibliotecario'), emprestimosController.registrarDevolucao); // Devolve livro pelo ID ou tombo
+router.put('/:id/renovar', autorizar('bibliotecario'), emprestimosController.registrarRenovacao); // Renova prazo por +7 dias
+router.put('/:id/justificativa', emprestimosController.enviarJustificativaAtraso); // Aluno ou admin envia justificativa de atraso
 
 module.exports = router;

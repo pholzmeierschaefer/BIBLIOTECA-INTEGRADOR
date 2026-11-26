@@ -1,4 +1,9 @@
-// Mensagens.jsx – Listagem de justificativas de atraso enviadas pelos estudantes
+// =============================================================================
+// [RESUMO 4 | RELATÓRIO 2.3] CAIXA DE JUSTIFICATIVAS DE ATRASO (ADMIN)
+// O QUE FAZ: Carrega as justificativas enviadas pelos alunos pelo PortalAluno e
+// permite ao bibliotecário marcá-las como 'analisada'.
+// POR QUE ESTÁ AQUI: Fecha o fluxo de comunicação aluno -> bibliotecário sobre atrasos.
+// =============================================================================
 
 import { useEffect, useState } from 'react';
 import { Box, Button, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';

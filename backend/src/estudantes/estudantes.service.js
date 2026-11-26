@@ -1,12 +1,13 @@
-// estudantes.service.js – Regras de negócio para o gerenciamento e importação de Estudantes (incluindo planilha SISGESC .xlsx e .csv)
+// estudantes.service.js – Regras de negócio de Estudantes e Importação em Lote (planilhas SISGESC .xlsx e .csv)
+// [RELATÓRIO 2.1c | RELATÓRIO 3.3 - Senha Inicial Igual à Matrícula | RELATÓRIO 4.2.1 - Dificuldade Planilhas SISGESC]
 
-const zlib = require('zlib');
-const bcrypt = require('bcrypt');
+const zlib = require('zlib'); // Módulo nativo do Node.js usado para descompactar arquivos .xlsx (que internamente são ZIP + XML)
+const bcrypt = require('bcrypt'); // Usado para gerar o hash da senha inicial do aluno (igual à matrícula)
 const estudantesRepository = require('./estudantes.repository');
 
 const STATUS_VALIDOS = ['ativo', 'bloqueado', 'inativo'];
 
-// Cria um erro padronizado com código de status HTTP (ex: 400, 404, 409)
+// [RELATÓRIO 4.2.3] Função auxiliar para criar erros padronizados com status HTTP (400, 404, 409)
 function criarErroHttp(statusCode, mensagem, codigo) {
   const err = new Error(mensagem);
   err.statusCode = statusCode;
@@ -14,7 +15,7 @@ function criarErroHttp(statusCode, mensagem, codigo) {
   return err;
 }
 
-// Formata os dados do estudante que serão devolvidos pela API
+// Formata os dados do estudante que serão devolvidos em JSON para o Frontend
 function formatarEstudante(estudante) {
   return {
     id: estudante.id,
@@ -29,7 +30,7 @@ function formatarEstudante(estudante) {
   };
 }
 
-// Valida se o status informado está entre os permitidos ('ativo', 'bloqueado', 'inativo')
+// [RELATÓRIO 4.2.3] Função auxiliar de validação: garante que apenas 'ativo', 'bloqueado' ou 'inativo' sejam aceitos
 function validarStatus(status) {
   const statusLimpo = String(status).trim().toLowerCase();
   if (!STATUS_VALIDOS.includes(statusLimpo)) {
@@ -38,7 +39,7 @@ function validarStatus(status) {
   return statusLimpo;
 }
 
-// Localiza um estudante aceitando tanto a matrícula quanto o ID numérico na URL
+// Localiza um estudante aceitando tanto a matrícula escolar quanto o ID numérico na URL
 async function localizarPorMatriculaOuId(identificador) {
   const valor = String(identificador).trim();
   let estudante = await estudantesRepository.buscarEstudantePorMatricula(valor);
@@ -49,7 +50,12 @@ async function localizarPorMatriculaOuId(identificador) {
   return estudante;
 }
 
-// --- Leitura e Filtro de Planilhas SISGESC (.xlsx e .csv) ---
+// =========================================================================================
+// [RELATÓRIO 4.2.1 - DIFICULDADE E SOLUÇÃO] LEITURA DE PLANILHAS REAIS DO SISGESC (.xlsx/.csv)
+// As planilhas da escola trazem várias linhas institucionais no topo ("ESTADO DE SANTA CATARINA")
+// e dezenas de colunas extras (CPF, NIS, SUS, endereço, etc.). As funções abaixo localizam
+// apenas o cabeçalho real e extraem somente Matrícula, Nome, Turma e Telefone.
+// =========================================================================================
 
 // Remove acentos, símbolos e espaços do nome da coluna para comparar com facilidade
 function normalizarTexto(texto) {
@@ -306,7 +312,8 @@ async function buscarPorMatricula(matricula) {
   return formatarEstudante(estudante);
 }
 
-// Cadastra um novo estudante validando se a matrícula já existe
+// [RELATÓRIO 3.3] Cadastra um novo estudante validando duplicidade de matrícula
+// e já cria a conta de acesso (tabela 'usuarios') com senha inicial igual à própria matrícula
 async function cadastrarEstudante(dados) {
   const matricula = String(dados.matricula || '').trim();
   const nome_completo = String(dados.nome || dados.nome_completo || '').trim();
@@ -378,7 +385,8 @@ async function inativarEstudante(matriculaParam) {
   await estudantesRepository.excluirEstudante(estudante.id);
 }
 
-// Importa estudantes em lote via planilha .xlsx (SISGESC), texto CSV ou array JSON
+// [RELATÓRIO 4.2.1] Importa estudantes em lote via planilha .xlsx (SISGESC), texto CSV ou array JSON.
+// Para cada novo aluno importado, cria também a conta de login com senha inicial igual à matrícula.
 async function importarEstudantes({ xlsxBase64, csv, estudantes, atualizarExistentes = false }) {
   let listaBruta = [];
 

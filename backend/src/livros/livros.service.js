@@ -1,4 +1,10 @@
-// livros.service.js – Regras de negócio para Livros, Categorias e Exemplares físicos
+// =============================================================================
+// [RELATÓRIO 2.1c & 3.1] SERVICE DE LIVROS E EXEMPLARES (SEPARAÇÃO CONCEITUAL)
+// O QUE FAZ: Gerencia cadastro de títulos (tabela `livros`), categorias e
+// exemplares físicos individuais (tabela `exemplares` com código de tombo).
+// POR QUE ESTÁ AQUI: Decisão 3.1 do relatório — 1 obra (ex: Dom Casmurro) pode
+// ter N exemplares físicos independentes (um emprestado, outro disponível).
+// =============================================================================
 
 const livrosRepository = require('./livros.repository');
 
@@ -11,7 +17,7 @@ function criarErroHttp(statusCode, mensagem) {
   return err;
 }
 
-// Formata o objeto de um exemplar físico para devolver no JSON da API
+// [RELATÓRIO 3.1] Formata um exemplar físico individual (tombo + status próprio na estante)
 function formatarExemplar(exemplar) {
   return {
     id: exemplar.id,
@@ -29,7 +35,8 @@ function formatarExemplar(exemplar) {
   };
 }
 
-// Formata os dados do livro e calcula automaticamente quantos exemplares estão disponíveis
+// [RELATÓRIO 3.1] Formata os dados da obra ("Livro") e calcula em tempo real quantos exemplares
+// físicos estão com status 'disponivel' na estante versus o total de cópias cadastradas.
 function formatarLivro(livro, incluirExemplares = false) {
   const exemplares = livro.exemplares || [];
   const disponiveis = exemplares.filter((ex) => ex.status === 'disponivel').length;
