@@ -58,7 +58,10 @@ async function registrarDevolucao(req, res, next) {
     const bodyTombo =
       req.body?.exemplar_tombo ?? req.body?.codigo_tombo ?? req.body?.codigo_exemplar;
 
-    // Aceita tanto devolver pelo ID numérico na URL quanto pelo código de tombo no parâmetro ou no body
+    // Aceita devolver por 3 caminhos: ID na URL (/15/devolver), tombo na URL (/TOMBO-001/devolver) ou no body (/devolver).
+    // A regex /^\d+$/ testa se paramId contém APENAS dígitos numéricos (ex: "15" -> true, "TOMBO-001" -> false):
+    // - Se paramId for só números, assume que é emprestimoId; senão, tenta pegar req.body.emprestimo_id.
+    // - Se paramId NÃO for só números, assume que é o código de tombo na URL; senão, usa o tombo enviado no body.
     const emprestimoId =
       paramId && /^\d+$/.test(paramId) ? Number(paramId) : Number(req.body?.emprestimo_id) || null;
     const exemplarTombo =

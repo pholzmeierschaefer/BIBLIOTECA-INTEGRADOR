@@ -7,8 +7,11 @@ const emprestimosRepository = require('./emprestimos.repository');
 const PRAZO_PADRAO_DIAS = 7; // Prazo padrão de 7 dias corridos por empréstimo ou renovação
 const LIMITE_EMPRESTIMOS_SIMULTANEOS = 2; // Máximo de 2 livros emprestados por aluno ao mesmo tempo
 const LIMITE_ATRASO_CRITICO_DIAS = 10; // Atrasos acima de 10 dias recebem alerta crítico no dashboard
-const MS_POR_DIA = 1000 * 60 * 60 * 24; // Quantidade de milissegundos em 1 dia (usado no cálculo de atraso)
+const MS_POR_DIA = 1000* 60 * 60 * 24; // Quantidade de milissegundos em 1 dia (usado no cálculo de atraso)
+          //ms=1seg //60s=1m //60m=1h //24h = 1d
+          //==86400000ms
 
+          
 // [RELATÓRIO 4.2.3] Função auxiliar para criar erros de negócio com código HTTP (400, 403, 404, 409)
 // O erroHandler.js lê err.statusCode para responder o status HTTP certo sem expor detalhes internos
 function criarErroHttp(statusCode, mensagem) {
@@ -24,7 +27,10 @@ function adicionarDias(dataBase, dias) {
   return novaData;
 }
 
-// Calcula quantos dias corridos se passaram desde a data prevista de devolução
+// Calcula quantos dias corridos se passaram desde a data prevista de devolução.
+// Como .getTime() retorna datas em milissegundos, dividimos a diferença por MS_POR_DIA para converter em dias:
+// - Math.floor(...) pega apenas os dias inteiros;
+// - Math.max(1, ...) garante que, se já venceu (mesmo por algumas horas), conte ao menos 1 dia de atraso.
 function calcularDiasAtraso(dataPrevista, referencia = new Date()) {
   const diffMs = referencia.getTime() - new Date(dataPrevista).getTime();
   return diffMs > 0 ? Math.max(1, Math.floor(diffMs / MS_POR_DIA)) : 0;
